@@ -11,8 +11,7 @@ Files:
 - src/collision.js: line/segment collision helpers
 - src/game.js: core game logic (glue, actors, levels)
 - src/player.js: player, sparks, and movement
-- src/enemy.js: inner roaming enemies
-- src/sparx.js: edge-walking Sparx with Super state
+-- src/enemy.js: inner roaming enemies
 - src/draw.js: drawing helpers
 - src/input.js: keyboard input
 - src/particles.js: particle manager
@@ -36,10 +35,10 @@ Notes/TODO:
 - Holding `Shift` while drawing sets slow draw mode: successful captures entirely made while holding shift award double points.
 - Press `P` to pause the game.
 - Split Qix (enemies) into separate regions to increase score multiplier for future captures (ongoing multiplier shown in HUD).
-- Each level increases difficulty by adding more inner enemies and additional Sparx that walk the edges.
+-- Each level increases difficulty by adding more inner enemies.
 - Splitting the enemies between regions or capturing enough area will advance the level and add more enemies.
 - Splitting enemies also increases a persistent score multiplier and will spawn more enemies.
-- Sparx enemies may temporarily enter a "Super" state (indicated in HUD), where they chase and speed up for several seconds; in Super state Sparx will chase the player's trail (if present) instead of the player center.
+ - If you enclose an enemy into a region significantly smaller than the largest remaining region it will be destroyed and converted into score/particles (configurable threshold).
 - High score is saved to your browser's localStorage and shown in the HUD.
 
 How to run:

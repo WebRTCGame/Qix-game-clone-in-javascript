@@ -26,3 +26,35 @@ export function pointToSegmentDistance(px, py, ax, ay, bx, by){
   const dx = ax + vx*t - px; const dy = ay + vy*t - py;
   return Math.hypot(dx,dy);
 }
+export function circleRectPenetration(cx, cy, radius, rx, ry, rw, rh){
+  // find closest point in rect to circle center
+  const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+  const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+  let dx = cx - nearestX; let dy = cy - nearestY;
+  let dist = Math.hypot(dx, dy);
+  // if center is inside rect, choose smallest axis penetration normal
+  if(dist === 0){
+    // compute distances to each side
+    const left = Math.abs(cx - rx);
+    const right = Math.abs((rx + rw) - cx);
+    const top = Math.abs(cy - ry);
+    const bottom = Math.abs((ry + rh) - cy);
+    const minSide = Math.min(left, right, top, bottom);
+    if(minSide === left){ dx = 1; dy = 0; dist = left; }
+    else if(minSide === right){ dx = -1; dy = 0; dist = right; }
+    else if(minSide === top){ dx = 0; dy = 1; dist = top; }
+    else { dx = 0; dy = -1; dist = bottom; }
+  }
+  const penetration = radius - dist;
+  if(penetration > 0){
+    const nx = dx === 0 && dy === 0 ? 0 : dx / (dist || 1);
+    const ny = dx === 0 && dy === 0 ? 0 : dy / (dist || 1);
+    return { penetration, nx, ny, nearestX, nearestY };
+  }
+  return null;
+}
+
+export function reflectVector(vx, vy, nx, ny){
+  const d = vx*nx + vy*ny;
+  return { x: vx - 2*d*nx, y: vy - 2*d*ny };
+}

@@ -1,118 +1,166 @@
 import Player from './player.js';
 import Enemy from './enemy.js';
-import Sparx from './sparx.js';
 import Draw from './draw.js';
 import Input from './input.js';
 import Sound from './sound.js';
 import Particles from './particles.js';
-import { floodFillRegions, resetGrid, cellFor as gridCellFor, worldForCell as gridWorldForCell } from './grid.js';
+import Board from './board.js';
 import { linesIntersect, pointToSegmentDistance } from './collision.js';
-import { setPercent, setScore, setLives, setLevel, setMultiplier, setStatus, setHighScore, setSuperText } from './hud.js';
-import { WIDTH, HEIGHT, CELL, COLS, ROWS, FPS, CAPTURE_PERCENT } from './constants.js';
+import { setPercent, setScore, setLives, setLevel, setMultiplier, setStatus, setHighScore, setSuperText, setEnemies, setPowerup, setAmmo, setBossHP, setLevelName, setCaves } from './hud.js';
+import Powerup from './powerup.js';
+import LEVELS from './levels.js';
+import { WIDTH, HEIGHT, CELL, COLS, ROWS, FPS, CAPTURE_PERCENT, LEVEL_COMPLETE_PERCENT, BOUNCE_DAMP, DESTROY_REGION_THRESHOLD, ENEMY_DESTROY_SCORE } from './constants.js';
 
 export default class Game {
-  constructor(canvas, ctx){
-    this.canvas = canvas;
-    this.ctx = ctx;
-    this.grid = new Array(ROWS).fill(0).map(()=>new Array(COLS).fill(0));
-    this.player = null;
-    this.enemies = [];
-    this.trail = [];
-    this.capturing = false; // whether player is currently drawing
-    this.tick = 0;
-    this.running = false;
-    this.percent = 0;
-    this.lives = 3;
-    this.score = 0;
-    this.fuse = { active: false, index: 0, progress: 0, speed: 6, idleTimer: 0, delay: 0.6 };
-    this.captureSlow = false;
-    this.input = new Input();
-    this.sound = new Sound();
-    this.paused = false;
-    this._pHeld = false;
-    this.multiplier = 1;
-    this.particles = new Particles();
-    this.level = 1;
-    this.superInterval = 12; // seconds between super events
-    this.superTimer = 0;
-    this.highScore = Number(localStorage.getItem('qix_highscore') || 0);
-  }
 
-  handleDeath(){
-    this.lives -= 1;
-      setLives(this.lives);
-    this.player.alive = false;
-    if(this.lives <= 0){
-      this.gameOver();
-      return;
-    }
-    // respawn after a short delay
-    setTimeout(()=>{
-      this.player = new Player(WIDTH/2, HEIGHT - CELL*1.5, CELL);
-      this.trail = [];
-      this.fuse = { active: false, index: 0, progress: 0, speed: 6, idleTimer: 0, delay: 0.6 };
-    }, 900);
+  constructor(canvas, ctx){
+    this.canvas = canvas; this.ctx = ctx;
+    this.input = new Input(); this.sound = new Sound(); this.particles = new Particles();
+    this.board = new Board(ROWS, COLS, CELL);
+    this.grid = this.board.grid;
+    this.enemies = []; this.trail = []; this.powerups = []; this.projectiles = [];
+    this._floatingTexts = []; this.regionOverlays = [];
+    this.caveOverlays = [];
+    this.level = 0; this.multiplier = 1; this.score = 0; this.lives = 3;
+    this.rafId = null; this.last = performance.now(); this.accumulator = 0; this.running = false; this.paused = false;
+    this.captureSlow = false; this.fuse = { active: false, progress: 0, speed: 0.6, delay: 0.6, idleTimer: 0 };
+    this._pHeld = false;
+    this._enemySizeTimer = 0; // throttle periodic sizing updates
+    this._enemySizeInterval = 0.25; // seconds
   }
 
   init(){
-    this.level = 0; this.multiplier = 1; this.score = 0; this.lives = 3;
-      setScore(this.score); setLives(this.lives); setMultiplier(this.multiplier); setHighScore(this.highScore);
-    setHighScore(this.highScore);
-    this.nextLevel();
-    // initial region assign
-    this.updatePercent();
-    const regions = floodFillRegions(this.grid);
-    // map cells to region
-    const cellToRegion = {};
-    for(let i=0;i<regions.length;i++){
-      for(const cell of regions[i].cells){
-        cellToRegion[cell.r+','+cell.c] = i;
-      }
-    }
-    for(let i=0;i<this.enemies.length;i++){
-      const enemy = this.enemies[i];
-      const cell = this.cellFor(enemy.x, enemy.y);
-      const rid = cellToRegion[cell.r+','+cell.c];
-      if(typeof rid === 'number'){
-        const reg = regions[rid];
-        const ratio = reg.cells.length / (COLS * ROWS);
-        const newRad = 6 + Math.floor(ratio * 300);
-        enemy.radius = Math.max(3, Math.floor(newRad * 0.2));
-      }
-    }
-    this.last = performance.now();
-    this.running = true;
-    this.accumulator = 0;
-    this.step = 1 / FPS;
+    if(this.canvas){ this.canvas.width = WIDTH; this.canvas.height = HEIGHT; }
+    // start fresh
+    this.restart();
+    return this;
+  }
+
+  _frame(ts){
+    const dt = (ts - this.last) / 1000;
+    this.last = ts;
+    this.accumulator += dt;
+    const step = 1.0 / FPS;
+    while(this.accumulator >= step){ this.update(step); this.accumulator -= step; }
+    this.draw();
     this.rafId = requestAnimationFrame(this._frame.bind(this));
   }
 
-  _frame(now){
-    const dt = (now - this.last) / 1000; this.last = now;
-    this.accumulator += dt;
-    const maxSteps = 5; let steps = 0; // avoid spiral of death
-    while(this.accumulator >= this.step && steps++ < maxSteps){
-      this.update(this.step);
-      this.accumulator -= this.step;
+  resetGrid(){ this.board.reset(); this.grid = this.board.grid; }
+
+  findNearestFilledCell(x,y){ return this.board.findNearestFilledCell(x,y); }
+
+  finalizeCapture(){
+    // simple finalized capture: commit trail as filled then capture any empty regions that don't contain enemies
+    for(const p of this.trail){ const cell = this.board.getCell(p.r, p.c); if(cell && cell.isEmpty()) this.board.setCell(p.r, p.c, 1); }
+
+    // compute regions on the real grid now that trail acts as boundary
+    const regions = this.board.floodFillRegions();
+
+    // map from cell to region index
+    const cellToRegion = {};
+    for(let i=0;i<regions.length;i++){
+      for(const cell of regions[i].cells){ cellToRegion[cell.r+','+cell.c] = i; }
     }
-    this.draw();
-    if(this.running) this.rafId = requestAnimationFrame(this._frame.bind(this));
-  }
 
-  resetGrid(){
-    resetGrid(this.grid);
-  }
+    // track enemy cells
+    const enemyCells = new Set();
+    for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); if(cell) enemyCells.add(cell.r + ',' + cell.c); }
 
-  loop(){
-    this.update(1/FPS);
-    this.draw();
-  }
+    // For each region, if it contains no enemies, fill it
+    let newFilled = 0;
+    for(const region of regions){
+      let hasEnemy = false;
+      for(const cell of region.cells){ if(enemyCells.has(cell.r + ',' + cell.c)){ hasEnemy = true; break; } }
+      if(!hasEnemy){
+        for(const cell of region.cells){ const cc = this.board.getCell(cell.r, cell.c); if(cc && cc.isEmpty()){ this.board.setCell(cell.r, cell.c, 1); newFilled++; } }
+      }
+    }
 
-  update(dt){
-    this.tick++;
+    // clear trail and reset capture state
+    this.trail = [];
+    this.player.capturing = false;
+    this.updatePercent();
+
+    // award score, double if slow capture
+    const multiplier = this.captureSlow ? 2 : 1;
+    this.score += newFilled * 10 * multiplier * this.multiplier;
+    if(this.score > (this.highScore || 0)){ this.highScore = this.score; localStorage.setItem('qix_highscore', String(this.highScore)); setHighScore(this.highScore, true); }
+    this.captureSlow = false;
+    setScore(this.score); setMultiplier(this.multiplier);
+
+    // NOTE: enemy sizing will be computed after cave overlays are recomputed below
+
+    // Check if enemies are split across different regions (end level)
+    const enemyRegionSet = new Set();
+    for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number') enemyRegionSet.add(rid); }
+    if(enemyRegionSet.size > 1){ setStatus('Qix Split! Level Cleared'); this.nextLevel(); return; }
+
+    // Also consider level complete when no enemies remain
+    if(this.enemies.length === 0){ setStatus('All enemies eliminated! Level Cleared'); this.nextLevel(); return; }
+
+    if(newFilled > 0){ this.sound.play('capture'); if(this.particles) this.particles.add(this.player.x, this.player.y, 20); }
+
+    // multiplier persists if split
+    this.updateMultiplier(newFilled, regions, cellToRegion);
+
+    // recompute visual overlays (corners, special lines) and use those special
+    // overlay cells as walls when recomputing cave regions so caves align with
+    // green-line overlays (and magenta filled cells already in grid)
+    try{ this.cornerOverlays = this.board.findCapturedCorners(); console.log('detectCorners -> count=', this.cornerOverlays.length); }catch(e){ this.cornerOverlays = []; }
+    try{
+      // compute raw special overlays (may include cells on obstacles)
+      const rawSpecial = this.board.findType2Lines() || [];
+      // remove any overlay cells that overlap enemies (we'll still allow overlays to span obstacles)
+      const enemyCells = new Set();
+      for(const e of this.enemies){ const ec = this.cellFor(e.x, e.y); if(ec) enemyCells.add(ec.r + ',' + ec.c); }
+      // overlays used for drawing should skip obstacles and enemy-occupied cells
+        this.specialOverlays = rawSpecial.filter(o => {
+        if(!o) return false; if(typeof o.r !== 'number' || typeof o.c !== 'number') return false;
+        const oc = this.board.getCell(o.r,o.c); if(!oc || !oc.isEmpty()) return false; // skip obstacles/filled when drawing
+        if(enemyCells.has(o.r + ',' + o.c)) return false; // skip enemies
+        return true;
+      });
+      console.log('detectSpecialLines -> count=', this.specialOverlays.length);
+      // Now compute cave regions using only the secondary (lime) overlay cells as walls
+      try{
+        // For cave detection we want the green-line partitions to be continuous
+        // even if they pass over obstacles, so pass the secondary cells from the
+        // raw special overlays (before draw-filtering) into detectCaves.
+        // Start with secondary (lime) cells only, but bridge small gaps by
+        // including any adjacent primary cells (one-cell dilation) so partition
+        // walls are continuous even when classification splits a line.
+        let secondaryOverlays = rawSpecial.filter(o => o && o.type === 'secondary');
+        if(secondaryOverlays.length){
+          const rawMap = new Map(rawSpecial.map(o => [`${o.r},${o.c}`, o]));
+          const secSet = new Set(secondaryOverlays.map(o => `${o.r},${o.c}`));
+          // collect neighboring primary cells
+          const toAdd = new Set();
+          for(const s of secondaryOverlays){ const n4 = [[s.r-1,s.c],[s.r+1,s.c],[s.r,s.c-1],[s.r,s.c+1]]; for(const [nr,nc] of n4){ const k = `${nr},${nc}`; if(rawMap.has(k) && !secSet.has(k) && rawMap.get(k).type === 'primary'){ toAdd.add(k); } } }
+          if(toAdd.size){ for(const k of toAdd){ const [rr,cc] = k.split(',').map(Number); secondaryOverlays.push({r: rr, c: cc, type: 'secondary'}); } }
+        }
+        this.caveOverlays = this.board.detectCaves({ minSize: 2, maxErode: 20, overlayCells: secondaryOverlays });
+        console.log('detectCaves -> used overlayCells=', secondaryOverlays.length, 'caves=', this.caveOverlays.length);
+        // update HUD with caves
+        try{ setCaves(this.caveOverlays || []); }catch(e){ /* ignore if HUD not present */ }
+        // Now size enemies according to the cave/area they occupy. Smaller area => smaller enemy.
+        try{
+            if(this.caveOverlays && this.caveOverlays.length){
+            for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+          } else {
+            // fallback to region (cellToRegion from earlier)
+            for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = reg.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+          }
+        }catch(e){ /* sizing best-effort; ignore failures */ }
+      }catch(e){ this.caveOverlays = []; try{ setCaves([]); }catch(_){} }
+    }catch(e){ this.specialOverlays = []; }
+  }
+    update(dt){
     this.handleInput(dt);
     this.player.update(dt, this);
-    // update enemies
+    // update enemies - compute current regions so local perceived area can be used
+    const regions = this.board.floodFillRegions();
+    const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
     for(const enemy of this.enemies){
       enemy.update(dt, this);
       // check enemy vs trail collision
@@ -123,25 +171,129 @@ export default class Game {
           this.sound.play('spark');
           const spark = enemy.emitSpark({x:col.x,y:col.y}, this.player);
           if(spark) this.player.spawnSpark(spark);
+          // reflect enemy velocity off the trail normal for a more realistic bounce
+          if(col.nx && col.ny){
+            const dot = enemy.vx * col.nx + enemy.vy * col.ny;
+            enemy.vx = (enemy.vx - 2 * dot * col.nx) * BOUNCE_DAMP;
+            enemy.vy = (enemy.vy - 2 * dot * col.ny) * BOUNCE_DAMP;
+            // nudge a tiny amount away so we don't re-collide repeatedly
+            enemy.x += col.nx * 0.5; enemy.y += col.ny * 0.5;
+          }
         }
       }
 
-      // check direct collision with player (only when capturing)
-      if(this.player.capturing){
+      // check direct collision with player
+      {
         const d = enemy.distTo(this.player);
         if(d < enemy.radius + this.player.radius){
-          // Only kill when capturing according to rules
-          this.player.kill();
-          this.sound.play('die');
-          this.handleDeath();
+          if(this.player.capturing){
+            // Only kill when capturing according to rules
+            this.player.kill();
+            this.sound.play('die');
+            this.handleDeath();
+          } else {
+            // bounce off player — push enemy out and reflect velocity
+            const nx = (enemy.x - this.player.x) / (d || 1);
+            const ny = (enemy.y - this.player.y) / (d || 1);
+            const penetration = enemy.radius + this.player.radius - d;
+            enemy.x += nx * penetration;
+            enemy.y += ny * penetration;
+            const dot = enemy.vx * nx + enemy.vy * ny;
+            enemy.vx = (enemy.vx - 2 * dot * nx) * BOUNCE_DAMP;
+            enemy.vy = (enemy.vy - 2 * dot * ny) * BOUNCE_DAMP;
+          }
         }
       }
+    }
+
+    // Periodically recompute enemy sizes based on the area/cave they occupy
+    this._enemySizeTimer += dt;
+    if(this._enemySizeTimer >= this._enemySizeInterval){
+      this._enemySizeTimer = 0;
+      try{
+          if(this.caveOverlays && this.caveOverlays.length){
+          for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+        } else {
+          // fallback using flood-fill partitions when caves not available
+          const regions = this.board.floodFillRegions();
+          const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
+          const cellToRegion = {};
+          for(let i=0;i<regions.length;i++){ for(const cell of regions[i].cells) cellToRegion[cell.r + ',' + cell.c] = i; }
+          for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+        }
+      } catch(e){ /* ignore sizing errors */ }
     }
 
     // update sparks
     this.player.updateSparks(dt, this);
     // update particles
     if(this.particles) this.particles.update(dt);
+
+    // update projectiles
+    for(let i=this.projectiles.length-1;i>=0;i--){
+      const p = this.projectiles[i]; p.update(dt);
+      // remove if hit filled cell or out of bounds
+      const pc = this.cellFor(p.x,p.y);
+      if(p.isOutOfBounds() || (pc && !(this.board.getCell(pc.r,pc.c) && this.board.getCell(pc.r,pc.c).isEmpty()))){
+        this.projectiles.splice(i,1); continue;
+      }
+      // check collision with enemies
+      for(let j=this.enemies.length-1;j>=0;j--){
+        const e = this.enemies[j];
+        const d = Math.hypot(p.x - e.x, p.y - e.y);
+        if(d < e.radius + p.radius){
+          // hit
+          e.hp = (e.hp || 1) - 1;
+          this.projectiles.splice(i,1);
+          if(e.hp <= 0){
+            // remove enemy
+            const wasMain = e.type === 'main';
+            this.enemies.splice(j,1);
+            this.sound.play('pop');
+            this.particles.add(e.x,e.y,20);
+            // award score
+            this.score += (wasMain ? 5000 : 200) * this.multiplier;
+            setScore(this.score);
+            setEnemies(this.enemies.length, this.levelEnemyTotal);
+            if(wasMain){
+              setStatus('Main enemy destroyed! Level Cleared');
+              setTimeout(()=>{ this.nextLevel(); }, 700);
+              return; // bail from update because level will reset
+            }
+            break;
+          } else {
+            // enemy damaged
+            this.sound.play('hit');
+            if(e.type === 'main') setBossHP(e.hp, (this.currentLevel?.main?.hp || e.hp));
+            break;
+          }
+        }
+      }
+    }
+
+    // update powerups and handle pickup
+    for(let i=this.powerups.length-1;i>=0;i--){
+      const pu = this.powerups[i]; pu.update(dt);
+      if(pu.collidesWithPlayer(this.player)){
+        // apply effects
+        switch(pu.type){
+          case 'speed': this.player.speedMul = 1.6; this.player.speedTimer = 8.0; setStatus('Speed x1.6'); break;
+          case 'weapon': this.player.weaponAmmo += 8; setStatus('Weapon picked'); break;
+          case 'life': this.lives++; setLives(this.lives); setStatus('Extra Life'); break;
+          case 'shield': this.player.shieldTimer = 8.0; setStatus('Shield Active'); break;
+        }
+        this.sound.play('powerup');
+        this.powerups.splice(i,1);
+      }
+    }
+
+    // floating texts update
+    for(let i=this._floatingTexts.length-1;i>=0;i--){
+      const t = this._floatingTexts[i];
+      t.y -= dt * 30; // float up
+      t.life -= dt;
+      if(t.life <= 0) this._floatingTexts.splice(i,1);
+    }
 
     // fuse progression
     if(this.fuse.active){
@@ -154,26 +306,13 @@ export default class Game {
       }
     }
 
-    // super/transform timer
-    this.superTimer += dt;
-    if(this.superTimer >= this.superInterval){
-      this.superTimer = 0;
-      // set all Sparx to super for a short duration
-      for(const e of this.enemies){
-        if(e && e.constructor && e.constructor.name === 'Sparx'){
-          e.super = true; e.superTime = 3.5 + Math.random()*2;
-          e.color = '#ff4d4d';
-          // when entering super state, increase speed briefly
-          e.speed *= 1.2;
-          // after super ends, reduce speed back slightly (handled by Sparx)
-        }
-      }
-      this.sound.play('super');
-    }
+    // no super/transform timer — Sparx behavior removed
+    setSuperText('');
 
-    // update HUD: show super indicator if any Sparx are super
-    const superCount = this.enemies.reduce((n,e)=>n + ((e && e.constructor && e.constructor.name === 'Sparx' && e.super)?1:0),0);
-    setSuperText(superCount>0 ? `Sparx Super x${superCount}` : '');
+    // update HUD powerup/ammo display
+    const powerLabel = this.player.weaponAmmo>0 ? 'weapon' : (this.player.speedTimer>0 ? 'speed' : (this.player.shieldTimer>0 ? 'shield' : ''));
+    setPowerup(powerLabel, this.player.weaponAmmo>0 ? null : (this.player.speedTimer>0 ? this.player.speedTimer : (this.player.shieldTimer>0 ? this.player.shieldTimer : null)));
+    setAmmo(this.player.weaponAmmo);
   }
 
   handleInput(dt){
@@ -182,6 +321,7 @@ export default class Game {
       if(!this._pHeld){ this._pHeld = true; this.paused = !this.paused; if(this.paused){ if(this.rafId) cancelAnimationFrame(this.rafId); setStatus('Paused'); } else { this.last = performance.now(); this.accumulator = 0; this.rafId = requestAnimationFrame(this._frame.bind(this)); setStatus('Ready'); } }
     } else { this._pHeld = false; }
     if(this.paused) return;
+    // capture debug removed
     const dir = this.input.getDirection();
     if(dir.x !== 0 || dir.y !== 0) {
       this.fuse.idleTimer = 0;
@@ -189,7 +329,8 @@ export default class Game {
       // move player
       this.player.move(dir, dt);
       const playerCell = this.cellFor(this.player.x, this.player.y);
-      if(this.grid[playerCell.r][playerCell.c] === 0){
+      const pcell = this.board.getCell(playerCell.r, playerCell.c);
+      if(pcell && pcell.isEmpty()){
         // drawing inside area
         if(!this.player.capturing){
           this.player.startCapture(playerCell);
@@ -201,19 +342,20 @@ export default class Game {
           if(playerCell.r !== last.r || playerCell.c !== last.c){
             // If stepping onto our existing trail, it's death
             const match = this.trail.find(t => t.r === playerCell.r && t.c === playerCell.c);
-            if(match){ this.player.kill(); this.sound.play('die'); this.handleDeath(); return; }
+            if(match){ this.player.kill(); this.sound.play('die'); this.handleDeath({ nearest: true }); return; }
             // crossing segments check
             if(this.trail.length >= 2){
               const newSegA = {x:last.x, y:last.y};
               const newSegB = {x:this.player.x, y:this.player.y};
               for(let i=0;i<this.trail.length-2;i++){
-                const sA = {x:this.trail[i].x, y:this.trail[i].y};
-                const sB = {x:this.trail[i+1].x, y:this.trail[i+1].y};
-                if(sA.x===newSegA.x && sA.y===newSegA.y) continue;
-                if(sB.x===newSegB.x && sB.y===newSegB.y) continue;
-                if(sA.x===newSegB.x && sA.y===newSegB.y) continue;
-                if(linesIntersect(newSegA, newSegB, sA, sB)){
-                  this.player.kill(); this.sound.play('die'); this.handleDeath(); return;
+                const sA = this.trail[i];
+                const sB = this.trail[i+1];
+                // avoid exact float equality when skipping endpoints — use cell indexes
+                if(sA.r === last.r && sA.c === last.c) continue;
+                if(sB.r === playerCell.r && sB.c === playerCell.c) continue;
+                if(sA.r === playerCell.r && sA.c === playerCell.c) continue;
+                if(linesIntersect(newSegA, newSegB, {x:sA.x,y:sA.y}, {x:sB.x,y:sB.y})){
+                  this.player.kill(); this.sound.play('die'); this.handleDeath({ nearest: true }); return;
                 }
               }
             }
@@ -245,98 +387,23 @@ export default class Game {
     if(this.input.isKeyPressed('r')){
       this.restart();
     }
-  }
-
-  finalizeCapture(){
-    // convert trail cells to temporary filled and compute flood fill
-    for(const p of this.trail){
-      this.grid[p.r][p.c] = 1; // trail becomes filled boundary
-    }
-
-    // compute reachable empty regions from enemies and capture the rest
-    const regions = floodFillRegions(this.grid);
-    // regions is array of {cells: [[r,c...]], id}
-    const enemyCells = new Set();
-    for(const enemy of this.enemies){
-      const cell = this.cellFor(enemy.x, enemy.y);
-      enemyCells.add(cell.r + ',' + cell.c);
-    }
-
-    // For each region, check if it contains any enemy; if not, fill it
-    let newFilled = 0;
-    // Build a quick cell=>region map to assign enemies to regions
-    const cellToRegion = {};
-    for(let i=0;i<regions.length;i++){
-      for(const cell of regions[i].cells){
-        cellToRegion[cell.r+','+cell.c] = i;
-      }
-    }
-
-    for(const region of regions){
-      let hasEnemy = false;
-      for(const cell of region.cells){
-        const key = cell.r + ',' + cell.c;
-        if(enemyCells.has(key)) { hasEnemy = true; break; }
-      }
-      if(!hasEnemy){
-        // fill region
-        for(const cell of region.cells){
-            if(this.grid[cell.r][cell.c] === 0){
-            this.grid[cell.r][cell.c] = 1; newFilled++;
-          }
+      // shooting - space or z
+      const shootPressed = this.input.isKeyPressed(' ') || this.input.isKeyPressed('z') || this.input.isKeyPressed('Z');
+      if(shootPressed){
+        // allow shooting only when player is not capturing
+        if(this.player && !this.player.capturing){
+          const dir = this.input.getDirection();
+          let dx = dir.x, dy = dir.y;
+          if(dx === 0 && dy === 0) { dy = -1; } // default up
+          this.player.shoot(dx, dy, this);
         }
       }
-    }
-
-    // clear trail
-    this.trail = [];
-    this.player.capturing = false;
-    this.updatePercent();
-    // award score, double if slow capture
-    const multiplier = this.captureSlow ? 2 : 1;
-      this.score += newFilled * 10 * multiplier * this.multiplier;
-      // update high score
-      if(this.score > (this.highScore || 0)){
-        this.highScore = this.score; localStorage.setItem('qix_highscore', String(this.highScore));
-        setHighScore(this.highScore, true);
-      }
-    this.captureSlow = false;
-    setScore(this.score); setMultiplier(this.multiplier);
-
-    // Assign enemy sizes based on their region area
-    for(const enemy of this.enemies){
-      const cell = this.cellFor(enemy.x, enemy.y);
-      const rid = cellToRegion[cell.r+','+cell.c];
-      if(typeof rid === 'number'){
-        const reg = regions[rid];
-        // scale enemy radius proportional to region size
-        const ratio = reg.cells.length / (COLS * ROWS);
-        const newRad = 6 + Math.floor(ratio * 300);
-        enemy.radius = Math.max(3, Math.floor(newRad * 0.2));
-      }
-    }
-    // Check if enemies are split across different regions (end level)
-    const enemyRegionSet = new Set();
-    for(const enemy of this.enemies){
-      const cell = this.cellFor(enemy.x, enemy.y);
-      const rid = cellToRegion[cell.r+','+cell.c];
-      if(typeof rid === 'number') enemyRegionSet.add(rid);
-    }
-    if(enemyRegionSet.size > 1){
-      setStatus('Qix Split! Level Cleared');
-      this.nextLevel();
-      return;
-    }
-    if(newFilled > 0) {
-      this.sound.play('capture');
-      // spawn capture particles
-      this.particles.add(this.player.x, this.player.y, 20);
-    }
-    // multiplier persists if split
-    this.updateMultiplier(newFilled, regions, cellToRegion);
   }
 
+  
+
   updateMultiplier(newFilled, regions, cellToRegion){
+    const totalEmpty = regions ? regions.reduce((s,r)=>s + r.cells.length, 0) : 0;
     // if enemies are split across regions, increase multiplier
     const enemyRegionSet = new Set();
     for(const enemy of this.enemies){
@@ -353,47 +420,308 @@ export default class Game {
       while(tries++ < 50){
         const r = 1 + Math.floor(Math.random() * (ROWS-2));
         const c = 1 + Math.floor(Math.random() * (COLS-2));
-        if(this.grid[r][c] === 0){ const w = this.worldForCell(r,c); ex=w.x; ey=w.y; break; }
+        const cc = this.board.getCell(r,c);
+        if(cc && cc.isEmpty()){ const w = this.worldForCell(r,c); ex=w.x; ey=w.y; break; }
       }
       if(ex===0 && ey===0){ ex = 200 + Math.random()*400; ey = 200 + Math.random()*400; }
-      const e = new Enemy(ex, ey); e.vx *= 1 + this.level*0.03; e.vy *= 1 + this.level*0.03; this.enemies.push(e);
+      const e = new Enemy(ex, ey, 'minion');
+      e.vx *= 1 + this.level*0.03; e.vy *= 1 + this.level*0.03;
+      // size enemy relative to its region if known
+      const cell = this.cellFor(e.x, e.y);
+      const rid = cellToRegion[cell.r + ',' + cell.c];
+      if(typeof rid === 'number'){
+        const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS));
+        const newRad = 6 + Math.floor(ratio * 300);
+        e.radius = Math.max(3, Math.floor(newRad * 0.2));
+      }
+      // ensure it isn't spawned right on top of player
+      const dx = e.x - this.player.x; const dy = e.y - this.player.y; const d = Math.hypot(dx,dy)||1;
+      if(d < e.radius + this.player.radius + 8){ e.x += (dx/d) * (e.radius + this.player.radius + 8); e.y += (dy/d) * (e.radius + this.player.radius + 8); }
+      this.enemies.push(e);
+      // count this new enemy in the level total and update HUD
+      this.levelEnemyTotal++; setEnemies(this.enemies.length, this.levelEnemyTotal);
       setMultiplier(this.multiplier);
+
+      // recompute and store overlays for initial perceived regions
+      try{
+        const regions = this.board.floodFillRegions();
+        this.regionOverlays = this._assignRegionOverlays(regions);
+        // compute initial corner / special overlays and caves for level start
+        try{ this.cornerOverlays = this.board.findCapturedCorners(); }catch(_) { this.cornerOverlays = []; }
+        try{
+          const rawSpecial = this.board.findType2Lines() || [];
+          // drawing filters: skip cells on obstacles or enemy cells
+          const enemyCells = new Set();
+          for(const e of this.enemies){ const ec = this.cellFor(e.x, e.y); if(ec) enemyCells.add(ec.r + ',' + ec.c); }
+          this.specialOverlays = rawSpecial.filter(o => o && typeof o.r === 'number' && typeof o.c === 'number' && (this.board.getCell(o.r,o.c) && this.board.getCell(o.r,o.c).isEmpty()) && !enemyCells.has(o.r + ',' + o.c));
+          // caves should be computed using raw secondary overlay cells so partitions ignore obstacles
+          const secondary = rawSpecial.filter(o => o && o.type === 'secondary');
+          this.caveOverlays = this.board.detectCaves({ minSize: 2, maxErode: 20, overlayCells: secondary });
+          try{ setCaves(this.caveOverlays); }catch(_){}
+        }catch(e){ this.specialOverlays = []; this.caveOverlays = []; }
+      }catch(e){ /* ignore */ }
     }
+
+    // done
   }
 
   updatePercent(){
-    let total = ROWS * COLS;
-    let filled = 0;
-    for(let r=0; r<ROWS; r++){
-      for(let c=0; c<COLS; c++){
-        if(this.grid[r][c] === 1) filled++;
+    // Compute percent captured relative to the fillable interior
+    // (exclude the border cells which are pre-filled by design)
+    const interiorRows = Math.max(0, ROWS - 2);
+    const interiorCols = Math.max(0, COLS - 2);
+    // treat grid value 2 as obstacle (non-capturable); only interior cells
+    let total = 0; let filled = 0;
+    for(let r=1; r<ROWS-1; r++){
+      for(let c=1; c<COLS-1; c++){
+        const cc = this.board.getCell(r,c);
+        if(!cc || cc.isObstacle()) continue; // obstacle, don't count
+        total++;
+        if(cc && cc.isFilled()) filled++;
       }
     }
-    this.percent = Math.floor((filled / total) * 100);
+    // fall back to whole-grid percent if interior is somehow empty/invalid
+    const baseTotal = total === 0 ? interiorRows * interiorCols : total;
+    const pct = (filled / baseTotal) * 100;
+    // log internal percent calc values to help debug unexpected level completion
+    console.log('updatePercent debug -> interiorRows,interiorCols,obstacles, total, filled, baseTotal:', interiorRows, interiorCols, 'obstaclesIgnored=', total === interiorRows*interiorCols ? 0 : (interiorRows*interiorCols - total), total, filled, baseTotal);
+    this.percent = Number(pct.toFixed(2));
+    console.log('updatePercent result -> percent=', this.percent, 'LEVEL_COMPLETE_PERCENT=', (typeof LEVEL_COMPLETE_PERCENT !== 'undefined' ? LEVEL_COMPLETE_PERCENT : CAPTURE_PERCENT));
     setPercent(this.percent);
-    if(this.percent >= CAPTURE_PERCENT){
+    // level completion if percent captured hits the configured level-complete threshold
+    if(this.percent >= (typeof LEVEL_COMPLETE_PERCENT !== 'undefined' ? LEVEL_COMPLETE_PERCENT : CAPTURE_PERCENT)){
+      console.log('Percent threshold reached; scheduling nextLevel. percent=', this.percent);
       setStatus('Level Cleared!');
       // start next level
       setTimeout(()=>{ this.nextLevel(); }, 200);
     }
   }
 
+  handleDeath(opts = {}){
+    // opts.nearest -> respawn at nearest filled cell to where player died
+    // decrement lives and handle game over
+    this.lives = Math.max(0, (this.lives || 0) - 1);
+    setLives(this.lives);
+    this.trail = [];
+    this.player?.reset?.();
+    this.fuse.active = false; this.fuse.progress = 0; this.captureSlow = false;
+
+    if(this.lives <= 0){
+      this.sound.play('die');
+      this.gameOver();
+      return;
+    }
+
+    // brief feedback
+    setStatus('Life lost');
+
+    // respawn at nearest filled cell if requested
+    let spawn = { x: WIDTH/2, y: HEIGHT - CELL*1.5 };
+    if(opts && opts.nearest && this.player){
+      const found = this.findNearestFilledCell(this.player.x, this.player.y);
+      if(found) spawn = found;
+    } else {
+      const found = this.findNearestFilledCell(spawn.x, spawn.y);
+      if(found) spawn = found;
+    }
+
+    // create new player at spawn
+    this.player = new Player(spawn.x, spawn.y, CELL);
+    // small pause before resuming
+    this.last = performance.now(); this.accumulator = 0;
+  }
+
+  // Build a temporary grid with the trail cells set as filled and return the temp grid,
+  // list of discrete trail cells and the wall segments (world coords) representing the trail.
+  _buildTempFromTrail(){
+    function bresenhamLine(r0,c0,r1,c1, grid, added){
+      let dr = Math.abs(r1 - r0), dc = Math.abs(c1 - c0);
+      let sr = r0 < r1 ? 1 : -1; let sc = c0 < c1 ? 1 : -1;
+      let err = (dr>dc ? dr : -dc)/2;
+      let r=r0, c=c0;
+      while(true){ if(grid[r][c] === 0){ grid[r][c] = 1; if(added) added.push({r,c}); } if(r===r1 && c===c1) break; let e2 = err; if(e2 > -dr){ err -= dc; r += sr; } if(e2 < dc){ err += dr; c += sc; } }
+    }
+
+    const tempGrid = this.grid.map(row => row.slice());
+    const trailFilled = [];
+    for(let i=0;i<this.trail.length;i++){
+      const p = this.trail[i];
+      if(tempGrid[p.r] && tempGrid[p.r][p.c] === 0){ tempGrid[p.r][p.c] = 1; trailFilled.push({r:p.r,c:p.c}); }
+      if(i>0){ const a = this.trail[i-1]; const b = this.trail[i]; if(a.r !== b.r || a.c !== b.c){ bresenhamLine(a.r, a.c, b.r, b.c, tempGrid, trailFilled); } }
+    }
+    // build walls from trail segments (world coords), closing from last trail cell to player
+    const walls = [];
+    for(let i=1;i<this.trail.length;i++){ const a = this.trail[i-1]; const b = this.trail[i]; walls.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y }); }
+    let dilatedCount = 0;
+    if(this.trail.length){
+      const last = this.trail[this.trail.length-1]; walls.push({ x1: last.x, y1: last.y, x2: this.player.x, y2: this.player.y });
+      // rasterize the closing segment into tempGrid to ensure contiguous barrier
+      const endCell = this.cellFor(this.player.x, this.player.y);
+      if(endCell && (endCell.r !== last.r || endCell.c !== last.c)){
+        bresenhamLine(last.r, last.c, endCell.r, endCell.c, tempGrid, trailFilled);
+      }
+    }
+    // one-pass dilation in tempGrid around trail cells to close small gaps between adjacent centers
+    const toDilate = trailFilled.slice();
+    const dilated = [];
+    for(const p of toDilate){
+        const neighs = [[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1],[p.r-1,p.c-1],[p.r-1,p.c+1],[p.r+1,p.c-1],[p.r+1,p.c+1]];
+      for(const [nr,nc] of neighs){
+        if(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && tempGrid[nr][nc] === 0){ tempGrid[nr][nc] = 1; dilated.push({r:nr,c:nc}); }
+      }
+    }
+    dilatedCount = dilated.length;
+    // additionally mark cells that are close to any wall segment so thin diagonal walls don't leak
+    const segThreshold = CELL * 0.55; let nearWallCount = 0;
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        if(tempGrid[r][c] !== 0) continue; // only blank cells
+        const cx = c*CELL + CELL/2; const cy = r*CELL + CELL/2;
+        for(const w of walls){
+          const d = pointToSegmentDistance(cx, cy, w.x1, w.y1, w.x2, w.y2);
+          if(d <= segThreshold){ tempGrid[r][c] = 1; nearWallCount++; break; }
+        }
+      }
+    }
+    dilatedCount += nearWallCount;
+    return { tempGrid, trailFilled, walls, dilatedCount };
+  }
+
+  // Compute polygon interior cells from the player's trail (in world coordinates), grouping into connected components.
+  // tempGrid is used to check for candidate empty cells (trail and other cells marked are treated accordingly).
+  _computePolygonComponents(trail, player, tempGrid, debugInfo){
+    const poly = [];
+    for(const p of trail) poly.push({x: p.x, y: p.y});
+    if(trail.length) poly.push({x: player.x, y: player.y});
+    if(poly.length < 3){ console.log('computePolygonComponents: polygon too small', poly.length); return []; }
+
+    function pointInPoly(x,y, poly){
+      let inside = false;
+      for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+        const xi = poly[i].x, yi = poly[i].y;
+        const xj = poly[j].x, yj = poly[j].y;
+        const intersect = ((yi>y) !== (yj>y)) && (x < (xj-xi) * (y-yi) / (yj-yi + 0.0) + xi);
+        if(intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for(const p of poly){ minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
+    const minC = Math.max(1, Math.floor((minX - CELL/2) / CELL));
+    const maxC = Math.min(COLS-2, Math.floor((maxX + CELL/2) / CELL));
+    const minR = Math.max(1, Math.floor((minY - CELL/2) / CELL));
+    const maxR = Math.min(ROWS-2, Math.floor((maxY + CELL/2) / CELL));
+
+    const polyCellsSet = new Set();
+    for(let r=minR;r<=maxR;r++){
+      for(let c=minC;c<=maxC;c++){
+        if(tempGrid[r][c] !== 0) continue; // only candidate empty cells
+        const cx = c*CELL + CELL/2; const cy = r*CELL + CELL/2;
+        if(pointInPoly(cx, cy, poly)) polyCellsSet.add(r + ',' + c);
+      }
+    }
+
+    const compVisited = new Set();
+    const comps = [];
+    for(const key of polyCellsSet){
+      if(compVisited.has(key)) continue;
+      const [sr, sc] = key.split(',').map(Number);
+      const stack = [[sr,sc]]; compVisited.add(key); const compCells = [];
+      while(stack.length){ const [cr,cc] = stack.pop(); compCells.push({r:cr,c:cc});
+        const neigh = [[cr-1,cc],[cr+1,cc],[cr,cc-1],[cr,cc+1]];
+        for(const [nr,nc] of neigh){ const k = nr+','+nc; if(polyCellsSet.has(k) && !compVisited.has(k)){ compVisited.add(k); stack.push([nr,nc]); } }
+      }
+      comps.push({cells: compCells});
+    }
+
+    console.log('computePolygonComponents: bbox=', {minR,minC,maxR,maxC}, 'candidates=', polyCellsSet.size, 'comps=', comps.length, 'debugInfo=', debugInfo);
+    return comps;
+  }
+
+  // Build overlay metadata (cells + color) for a set of flood-fill regions
+  _assignRegionOverlays(regions){
+    if(!regions || !regions.length) return [];
+    const overlays = [];
+    for(let i=0;i<regions.length;i++){
+      const hue = (i * 73) % 360; // spread hues
+      const color = `hsla(${hue}, 65%, 50%, 0.14)`;
+      // compute center cell for labeling
+      const cells = regions[i].cells;
+      let cx = 0, cy = 0;
+      for(const c of cells){ cx += c.c; cy += c.r; }
+      cx = cells.length ? (cx / cells.length) : 0; cy = cells.length ? (cy / cells.length) : 0;
+      overlays.push({ cells, color, label: String(cells.length), cx, cy });
+    }
+    return overlays;
+  }
+
   cellFor(x, y){
-    return gridCellFor(x,y);
+    return this.board.cellFor(x,y);
   }
 
   worldForCell(r,c){
-    return gridWorldForCell(r,c);
+    return this.board.worldForCell(r,c);
   }
 
   draw(){
-    Draw.clear(this.ctx, WIDTH, HEIGHT);
-    Draw.grid(this.ctx, this.grid, CELL);
+    // draw per-level background images if present; fallback to solid bg color
+    const levelIndex = Math.max(1, Math.min(99, this.level));
+    if(this.bgUncaptured && this.bgUncaptured.complete){
+      try{ this.ctx.drawImage(this.bgUncaptured, 0, 0, WIDTH, HEIGHT); }catch(e){ Draw.clear(this.ctx, WIDTH, HEIGHT, this.currentLevel?.bg); }
+    } else {
+      Draw.clear(this.ctx, WIDTH, HEIGHT, this.currentLevel?.bg);
+    }
+    // draw captured-area background masked to filled cells if available
+    const skipFilled = (this.bgCaptured && this.bgCaptured.complete);
+    if(skipFilled){
+      this.ctx.save();
+      this.ctx.beginPath();
+      for(let r=0;r<this.board.rows;r++){
+        for(let c=0;c<this.board.cols;c++){
+          const cc = this.board.getCell(r,c);
+          if(cc && cc.isFilled()) this.ctx.rect(c*CELL, r*CELL, CELL, CELL);
+        }
+      }
+      this.ctx.clip();
+      try{ this.ctx.drawImage(this.bgCaptured, 0, 0, WIDTH, HEIGHT); }catch(e){}
+      this.ctx.restore();
+    }
+
+    // use current level's fill color for captured regions
+    Draw.grid(this.ctx, this.grid, CELL, { fillColor: this.currentLevel?.fill || this.levelArt[(this.level) % this.levelArt.length], obstacleColor: '#444', drawFilled: !skipFilled });
+    // draw nearly-transparent overlays for perceived regions
+    if(this.regionOverlays && this.regionOverlays.length){ Draw.regions(this.ctx, this.regionOverlays, CELL); }
+    // cave overlays (uncaptured chambers)
+    if(this.caveOverlays && this.caveOverlays.length){ Draw.caveRects(this.ctx, this.caveOverlays, CELL); }
+    if(this.specialOverlays && this.specialOverlays.length){ Draw.specialLines(this.ctx, this.specialOverlays, CELL); }
+    if(this.cornerOverlays && this.cornerOverlays.length){ Draw.capturedCorners(this.ctx, this.cornerOverlays, CELL); }
+    // no temporary capture debug overlay (using simplified capture)
+    // debug highlight for cells filled during the last capture (short-lived)
+    if(this._debugTrailOverlay && this._debugTrailOverlay.expiry > performance.now()){
+      Draw.regions(this.ctx, [{ cells: this._debugTrailOverlay.cells, color: 'rgba(255,48,48,0.35)', debug:true }], CELL);
+    } else { this._debugTrailOverlay = null; }
+    if(this._debugLeakOverlay && this._debugLeakOverlay.expiry > performance.now()){
+      Draw.regions(this.ctx, [{ cells: this._debugLeakOverlay.cells, color: 'rgba(48,200,255,0.45)', debug:true }], CELL);
+    } else { this._debugLeakOverlay = null; }
     Draw.trail(this.ctx, this.trail, this.fuse, this.captureSlow);
     for(const enemy of this.enemies){
       Draw.enemy(this.ctx, enemy);
     }
+    // powerups + projectiles
+    for(const pu of this.powerups) Draw.powerup(this.ctx, pu);
+    for(const pr of this.projectiles) Draw.projectile(this.ctx, pr);
     Draw.player(this.ctx, this.player);
+    // floating texts drawn above player and other locations
+    for(const t of this._floatingTexts){
+      this.ctx.save();
+      this.ctx.font = `bold ${t.size || 22}px "Comic Sans MS", Impact, sans-serif`;
+      this.ctx.textAlign = 'center'; this.ctx.textBaseline = 'middle';
+      this.ctx.shadowColor = 'rgba(0,0,0,0.6)'; this.ctx.shadowBlur = 8;
+      this.ctx.fillStyle = t.color || '#ffcc00';
+      this.ctx.fillText(t.text, t.x, t.y);
+      this.ctx.restore();
+    }
     // particles
     if(this.particles) this.particles.draw(this.ctx);
     // draw percent in HUD (done elsewhere)
@@ -409,12 +737,8 @@ export default class Game {
     // simple restart
     this.resetGrid();
     this.enemies = [];
-    for(let i = 0; i < 3; i++){
-      this.enemies.push(new Enemy(100 + i*160, 200 + (i*60)%300));
-    }
-    this.player = new Player(WIDTH/2, HEIGHT - CELL*1.5, CELL);
     this.trail = [];
-    this.player.capturing = false;
+    if(this.player) this.player.capturing = false;
     this.level = 0; this.multiplier = 1; this.score = 0; this.lives = 3;
     this.nextLevel();
     this.lives = 3; this.score = 0;
@@ -429,44 +753,106 @@ export default class Game {
   nextLevel(){
     // increment level and spawn more enemies
     this.level += 1;
+    // pick level data
+    this.currentLevel = LEVELS[(this.level-1) % LEVELS.length];
+    // load per-level background images if present in assets/backgrounds/levelNN
+    try{
+      const idx = String(this.level).padStart(2,'0');
+      this.bgUncaptured = new Image(); this.bgUncaptured.src = `assets/backgrounds/level${idx}/uncaptured.jpg`;
+      this.bgCaptured = new Image(); this.bgCaptured.src = `assets/backgrounds/level${idx}/captured.jpg`;
+    }catch(e){ this.bgUncaptured = null; this.bgCaptured = null; }
     // reset grid before spawning
     this.resetGrid();
     this.enemies = [];
     const innerCount = Math.min(8, 2 + Math.floor(this.level/1));
-    // spawn inner enemies in random empty cells
+    // spawn inner enemies in random empty cells - ensure one 'main' enemy per level
     for(let i=0;i<innerCount;i++){
       let tries = 0; let ex = 0, ey = 0;
       while(tries++ < 50){
         const r = 1 + Math.floor(Math.random() * (ROWS-2));
         const c = 1 + Math.floor(Math.random() * (COLS-2));
-        if(this.grid[r][c] === 0){ const w = this.worldForCell(r,c); ex = w.x; ey = w.y; break; }
+        const cc = this.board.getCell(r,c);
+        if(cc && cc.isEmpty()){ const w = this.worldForCell(r,c); ex = w.x; ey = w.y; break; }
       }
       if(ex === 0 && ey === 0){ ex = 200 + Math.random()*400; ey = 200 + Math.random()*400; }
-      const e = new Enemy(ex, ey);
+      const type = i === 0 ? 'main' : 'minion';
+      const e = new Enemy(ex, ey, type);
       e.vx *= 1 + this.level*0.08; e.vy *= 1 + this.level*0.08;
       this.enemies.push(e);
     }
-    // add sparx as level increases
-    const sparxCount = 2 + Math.floor(this.level/4);
-    for(let si=0;si<sparxCount;si++){
-      const side = si%4;
-      let x = 20, y = 20;
-      if(side===0){ x=20; y=20 + Math.random()*760; }
-      if(side===1){ x=780; y=20 + Math.random()*760; }
-      if(side===2){ x=20 + Math.random()*760; y=20; }
-      if(side===3){ x=20 + Math.random()*760; y=780; }
-      const sparx = new Sparx(x,y,{x: Math.random()>0.5?1:-1, y:0});
-      sparx.speed = (110 + this.level*12) * 0.75;
-      sparx.baseSpeed = sparx.speed;
-      this.enemies.push(sparx);
+    // record the number of enemies at start-of-level
+    this.levelEnemyTotal = this.enemies.length;
+    setEnemies(this.enemies.length, this.levelEnemyTotal);
+    // if we have a main enemy, ensure hp/color from level
+    for(const e of this.enemies){ if(e.type === 'main' && this.currentLevel && this.currentLevel.main){ e.hp = this.currentLevel.main.hp || e.hp; e.color = this.currentLevel.main.color || e.color; } }
+    // add obstacles for this level (mark grid cells with 2)
+    this.powerups = [];
+    this.projectiles = [];
+    const obstacleCount = Math.min(60, Math.floor(this.level * 1.5) + (this.currentLevel ? this.currentLevel.obstacles : 0));
+    let placed = 0, tries = 0;
+    while(placed < obstacleCount && tries++ < 1000){
+      const r = 1 + Math.floor(Math.random() * (ROWS-2));
+      const c = 1 + Math.floor(Math.random() * (COLS-2));
+      const oc = this.board.getCell(r,c); if(!oc || !oc.isEmpty()) continue;
+      // avoid placing obstacles on top of an enemy or player
+      let blocked = false;
+      for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec.r === r && ec.c === c){ blocked = true; break; } }
+      const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
+      if(pcell.r === r && pcell.c === c) blocked = true;
+      if(blocked) continue;
+      this.board.setCell(r,c,2); placed++;
     }
-    // reset grid and player
-    this.resetGrid();
-    this.player = new Player(WIDTH/2, HEIGHT - CELL*1.5, CELL);
+    // spawn a few powerups (grey boxes) in empty cells
+    const puCount = (this.currentLevel?.powerups ?? 1) + Math.floor(this.level / 5);
+    tries = 0; placed = 0;
+    const types = ['speed','weapon','life','shield'];
+    while(placed < puCount && tries++ < 500){
+      const r = 1 + Math.floor(Math.random() * (ROWS-2));
+      const c = 1 + Math.floor(Math.random() * (COLS-2));
+      const pc = this.board.getCell(r,c);
+      if(pc && pc.isEmpty()){
+        // avoid spawning powerup on an enemy or player
+        let blocked = false;
+        for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec.r === r && ec.c === c){ blocked = true; break; } }
+        const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
+        if(pcell.r === r && pcell.c === c) blocked = true;
+        if(blocked) continue;
+        const w = this.worldForCell(r,c); const t = types[Math.floor(Math.random()*types.length)]; this.powerups.push(new Powerup(w.x,w.y,t)); placed++; }
+    }
+    // Sparx enemies removed — no edge-walking / homing enemy to avoid persistent chase behavior
+    // reset player — ensure spawn is on a safe (filled) cell
+    let spawnX = WIDTH/2, spawnY = HEIGHT - CELL*1.5;
+    const startCell = this.cellFor(spawnX, spawnY);
+    const startCellObj = this.board.getCell(startCell.r, startCell.c);
+    if(!(startCellObj && startCellObj.isFilled())){
+      const found = this.findNearestFilledCell(spawnX, spawnY);
+      if(found){ spawnX = found.x; spawnY = found.y; }
+    }
+    this.player = new Player(spawnX, spawnY, CELL);
     this.trail = [];
     this.updatePercent();
     setStatus(`Level ${this.level}`);
+    // HUD show level name
+    setLevelName(this.currentLevel?.name || '');
+    // show boss HP if present
+    const mainEnemy = this.enemies.find(e => e.type === 'main');
+    if(mainEnemy){ setBossHP(mainEnemy.hp, mainEnemy.hp); } else { setBossHP(null); }
     setLevel(this.level);
     setMultiplier(this.multiplier);
+
+    // assign enemy size based on perceived region after obstacles placed
+    try{
+      // Prefer cave overlays when available so enemy sizes reflect computed areas.
+      if(this.caveOverlays && this.caveOverlays.length){
+        for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+      } else {
+        const regions = this.board.floodFillRegions();
+        const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
+        // map cells to region id
+        const cellToRegion = {};
+        for(let i=0;i<regions.length;i++){ for(const cell of regions[i].cells) cellToRegion[cell.r + ',' + cell.c] = i; }
+        for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
+      }
+    } catch(e) { /* best-effort sizing; ignore failures */ }
   }
 }

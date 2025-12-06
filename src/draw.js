@@ -1,16 +1,30 @@
+// Preload sprite images (SVG pixel-art placeholders)
+const _images = {};
+['player','enemy_main','enemy_minion','powerup','projectile','obstacle'].forEach(name => {
+  const img = new Image(); img.src = `assets/${name}.svg`; img.alt = name; _images[name] = img;
+});
+
 const Draw = {
-  clear(ctx, w, h){
-    ctx.fillStyle = '#000';
+  clear(ctx, w, h, bg){
+    ctx.fillStyle = bg || '#000';
     ctx.fillRect(0,0,w,h);
   },
-  grid(ctx, grid, cell){
+  grid(ctx, grid, cell, opts = {}){
     // draw filled cells
     const rows = grid.length; const cols = grid[0].length;
     for(let r=0;r<rows;r++){
       for(let c=0;c<cols;c++){
         if(grid[r][c] === 1){
-          ctx.fillStyle = '#1e90ff'; // filled color
+          if(opts.drawFilled === false) { /* skip filled cell render */ }
+          else {
+          ctx.fillStyle = opts.fillColor || '#1e90ff'; // filled color (level art)
           ctx.fillRect(c*cell, r*cell, cell, cell);
+          }
+        } else if(grid[r][c] === 2){
+          // draw obstacle sprite if available
+          const img = _images.obstacle;
+          if(img && img.complete){ ctx.drawImage(img, c*cell, r*cell, cell, cell); }
+          else { ctx.fillStyle = opts.obstacleColor || '#666'; ctx.fillRect(c*cell, r*cell, cell, cell); }
         }
       }
     }
@@ -24,6 +38,30 @@ const Draw = {
       ctx.moveTo(c*cell, 0); ctx.lineTo(c*cell, rows*cell);
     }
     ctx.stroke();
+  },
+  // Draw translucent colored overlays for perceived regions. `overlays` is
+  // an array of { cells: [{r,c},...], color: 'rgba(...)', label?: string }
+  regions(ctx, overlays, cell){
+    if(!overlays || !overlays.length) return;
+    ctx.save();
+    for(const o of overlays){
+            // optionally draw a debug outline if there's a debug overlay marker
+            if(o.debug){
+              ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
+              for(const c of o.cells){ ctx.strokeRect(c.c*cell+0.5, c.r*cell+0.5, cell-1, cell-1); }
+              ctx.restore();
+            }
+      ctx.fillStyle = o.color || 'rgba(255,255,255,0.08)';
+      for(const c of o.cells){ ctx.fillRect(c.c * cell, c.r * cell, cell, cell); }
+      if(o.label){
+        // draw a small label at region center
+        ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
+        ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(o.label, (o.cx) * cell, (o.cy) * cell);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
   },
   trail(ctx, trail, fuse, slow){
     if(!trail || !trail.length) return;
@@ -49,20 +87,108 @@ const Draw = {
     }
   },
   player(ctx, player){
-    ctx.fillStyle = '#ff7f50';
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
-    ctx.fill();
+    const img = _images.player;
+    const pW = (player.radius + 2) * 2;
+    if(img && img.complete){
+      const angle = (typeof player.angle === 'number') ? player.angle : 0;
+      ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(angle + Math.PI/2);
+      ctx.drawImage(img, -pW/2, -pW/2, pW, pW);
+      ctx.restore();
+    } else { ctx.fillStyle = '#ff7f50'; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); }
     // sparks
     for(const sp of player.sparks){
-      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sp.x, sp.y, 3,0,Math.PI*2); ctx.fill();
+      const imgP = _images.projectile;
+      const sw = (sp.radius || 3) * 2;
+      if(imgP && imgP.complete){ const a = (typeof sp.angle === 'number' ? sp.angle : Math.atan2(sp.vy || 0, sp.vx || 1)); ctx.save(); ctx.translate(sp.x, sp.y); ctx.rotate(a + Math.PI/2); ctx.drawImage(imgP, -sw/2, -sw/2, sw, sw); ctx.restore(); }
+      else { ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sp.x, sp.y, 3,0,Math.PI*2); ctx.fill(); }
+    }
+    // shield
+    if(player.shieldTimer > 0){
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,128,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius+4, 0, Math.PI*2); ctx.stroke(); ctx.restore();
     }
   },
+  powerup(ctx, p){ if(!p) return; const img = _images.powerup; if(img && img.complete) ctx.drawImage(img, p.x - p.size, p.y - p.size, p.size*2, p.size*2); else p.draw(ctx); },
+  projectile(ctx, proj){ if(!proj) return; const img = _images.projectile; const w = proj.radius * 2.6; if(img && img.complete){ const a = (typeof proj.angle === 'number') ? proj.angle : Math.atan2(proj.vy||0, proj.vx||1); ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(a + Math.PI/2); ctx.drawImage(img, -w/2, -w/2, w, w); ctx.restore(); } else proj.draw(ctx); },
   enemy(ctx, enemy){
-    ctx.fillStyle = enemy.color || '#8b00ff';
-    ctx.beginPath();
-    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2);
-    ctx.fill();
+    ctx.save();
+    const imgName = enemy.type === 'main' ? 'enemy_main' : 'enemy_minion';
+    const img = _images[imgName];
+    if(img && img.complete){
+      const w = (enemy.radius + (enemy.type==='main'?4:2)) * 2;
+      const a = Math.atan2(enemy.vy || 0, enemy.vx || 1);
+      ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(a + Math.PI/2);
+      ctx.drawImage(img, -w/2, -w/2, w, w);
+      ctx.restore();
+      if(enemy.type === 'main'){
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
+      }
+    } else {
+      if(enemy.type === 'main'){
+        ctx.fillStyle = enemy.color || '#ff4500';
+        ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+2, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+4, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
+      } else {
+        ctx.fillStyle = enemy.color || '#8b00ff';
+        ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  },
+
+  // Draw rectangular overlays for caves (array of {id,x,y,w,h})
+  caveRects(ctx, caves, cell){
+    if(!caves || !caves.length) return;
+    ctx.save();
+    for(const c of caves){
+      ctx.fillStyle = c.color || 'rgba(48,200,255,0.12)'; ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.strokeStyle = c.strokeColor || 'rgba(48,200,255,0.6)'; ctx.lineWidth = Math.max(2, Math.min(4, cell/6));
+      ctx.strokeRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1);
+      // label
+      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const cx = c.x + c.w/2, cy = c.y + 12;
+      ctx.fillText(String(c.id), cx, cy);
+      ctx.restore();
+    }
+    ctx.restore();
+  },
+
+  // Draw short one-cell-wide line overlays for special uncaptured cells.
+  // overlays: array of {r,c,type} where type is 'primary'|'secondary'
+  specialLines(ctx, overlays, cell){
+    if(!overlays || !overlays.length) return;
+    ctx.save();
+    for(const o of overlays){
+      // only draw secondary (lime) cells; skip primary/dark-green
+      if(o.type !== 'secondary') continue;
+      const x = o.c * cell, y = o.r * cell;
+      ctx.fillStyle = '#32cd32'; ctx.strokeStyle = '#2aa02a';
+      ctx.fillRect(x, y, cell, cell);
+      ctx.lineWidth = Math.max(1, Math.min(2, cell/10));
+      ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+    }
+    ctx.restore();
+  },
+
+  // Highlight captured corner cells found by Board.findCapturedCorners
+  // corners: array of {r,c,type} where type===2 -> red, type===3 -> yellow
+  capturedCorners(ctx, corners, cell){
+    if(!corners || !corners.length) return;
+    ctx.save();
+    for(const cc of corners){
+      const x = cc.c * cell, y = cc.r * cell;
+      if(cc.type === 1){ ctx.fillStyle = '#ff00ff'; ctx.strokeStyle = '#b000b0'; }
+      else if(cc.type === 2){ ctx.fillStyle = '#ff0000'; ctx.strokeStyle = '#b00000'; }
+      else if(cc.type === 3){ ctx.fillStyle = '#ffd700'; ctx.strokeStyle = '#c09000'; }
+      else if(cc.type === 4){ ctx.fillStyle = '#007bff'; ctx.strokeStyle = '#005fbf'; }
+      else { ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.strokeStyle = 'rgba(255,255,255,0.5)'; }
+      ctx.lineWidth = Math.max(1, Math.min(3, cell/8));
+      ctx.fillRect(x, y, cell, cell);
+      ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+    }
+    ctx.restore();
   }
 }
 export default Draw;

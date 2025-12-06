@@ -1,15 +1,12 @@
-import Spark from './spark.js';
-import { pointToSegmentDistance } from './collision.js';
-export default class Sparx{
-  constructor(x,y,dir){
-    this.x = x; this.y = y; this.dir = dir || {x:1,y:0};
-    // saparx initial speed reduced by 25% and radius reduced by 80%
-    this.speed = 120 * 0.75; this.baseSpeed = this.speed; this.radius = 6 * 0.2; this.color = '#ffcc00';
-    this.super = false; this.superTime = 0; this.superDuration = 3.0; this._lastSpark = 0;
-    this._path = []; // list of cell coords to walk
+// Sparx class removed — kept as a tiny no-op placeholder for compatibility.
+export default class Sparx {
+  constructor(){
+    // No-op
   }
   update(dt, game){
-    if(this.super){
+    // intentionally left blank; Sparx enemy removed from gameplay
+    return;
+  }
       // chase the player's trail (if any) or head towards player center
       const trail = game.trail && game.trail.length > 1 ? game.trail : null;
       let targetPoint = null;
@@ -35,18 +32,46 @@ export default class Sparx{
       this.superTime -= dt; if(this.superTime <= 0){ this.super = false; this.color = '#ffcc00'; this.speed = this.baseSpeed; } return;
     }
     // Move along current dir; if next cell isn't filled, try to turn right/left/backwards
+    // integrate
     let nx = this.x + this.dir.x * this.speed * dt;
     let ny = this.y + this.dir.y * this.speed * dt;
-    const cell = game.cellFor(nx, ny);
-    if(game.grid[cell.r][cell.c] === 1){
-      this.x = nx; this.y = ny; return;
+    // precise collision vs filled cells
+    const minC = Math.max(0, Math.floor((nx - this.radius) / CELL));
+    const maxC = Math.min(COLS-1, Math.floor((nx + this.radius) / CELL));
+    const minR = Math.max(0, Math.floor((ny - this.radius) / CELL));
+    const maxR = Math.min(ROWS-1, Math.floor((ny + this.radius) / CELL));
+    for(let r = minR; r <= maxR; r++){
+      for(let c = minC; c <= maxC; c++){
+        const cc = game.board.getCell(r, c);
+        if(cc && cc.isFilled()){
+          const rx = c * CELL; const ry = r * CELL; const rw = CELL; const rh = CELL;
+          const pen = circleRectPenetration(nx, ny, this.radius, rx, ry, rw, rh);
+          if(pen){
+            // push out and reflect direction
+            nx += pen.nx * pen.penetration;
+            ny += pen.ny * pen.penetration;
+            const ref = reflectVector(this.dir.x * this.speed, this.dir.y * this.speed, pen.nx, pen.ny);
+            // convert back to normalized dir
+            const m = Math.hypot(ref.x, ref.y) || 1;
+            this.dir.x = ref.x / m; this.dir.y = ref.y / m;
+            this.speed = m; // preserve new speed magnitude
+          }
+        }
+      }
     }
+    this.x = nx; this.y = ny;
+    // keep inside canvas
+    // clamp using known canvas size (assume same constants as game world)
+    this.x = Math.max(this.radius + 1, Math.min(WIDTH - this.radius - 1, this.x));
+    this.y = Math.max(this.radius + 1, Math.min(HEIGHT - this.radius - 1, this.y));
+
     // can't go forward; try turn right, left, back, or random
     const choices = [ {x:this.dir.y, y:-this.dir.x}, {x:-this.dir.y, y:this.dir.x}, {x:-this.dir.x, y:-this.dir.y} ];
     for(const ch of choices){
       const tx = this.x + ch.x * this.speed * dt; const ty = this.y + ch.y * this.speed * dt;
       const ccell = game.cellFor(tx,ty);
-      if(game.grid[ccell.r][ccell.c] === 1){ this.dir = ch; this.x = tx; this.y = ty; return; }
+      const check = game.board.getCell(ccell.r, ccell.c);
+      if(check && check.isFilled()){ this.dir = ch; this.x = tx; this.y = ty; return; }
     }
     // if all else fails, reverse dir
     this.dir = {x:-this.dir.x, y:-this.dir.y};
@@ -60,13 +85,12 @@ export default class Sparx{
       const d = pointToSegmentDistance(this.x, this.y, a.x, a.y, b.x, b.y);
       if(d < best){ best = d; const t = Math.max(0, Math.min(1, ((this.x - a.x)*(b.x-a.x) + (this.y - a.y)*(b.y-a.y))/((b.x-a.x)*(b.x-a.x) + (b.y-a.y)*(b.y-a.y) || 1))); const px = a.x + (b.x-a.x)*t; const py = a.y + (b.y-a.y)*t; closest = {x:px,y:py}; }
     }
-    if(best <= this.radius + 2) return closest; return null;
+    if(best <= this.radius + 2){
+      const dx = this.x - closest.x; const dy = this.y - closest.y; const m = Math.hypot(dx,dy) || 1;
+      return { x: closest.x, y: closest.y, nx: dx/m, ny: dy/m, dist: best };
+    }
+    return null;
   }
-  emitSpark(point, player){
-    const now = performance.now();
-    if(now - this._lastSpark < 450) return null;
-    this._lastSpark = now;
-    return new Spark(point.x, point.y, {x:player.x, y:player.y});
-  }
-  distTo(player){ return Math.hypot(this.x-player.x, this.y-player.y); }
+  emitSpark(){ return null; }
+  distTo(){ return Infinity; }
 }

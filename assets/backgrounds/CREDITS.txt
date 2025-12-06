@@ -1,0 +1,24 @@
+Background images downloaded from Pexels (free to use under Pexels license).
+
+Level01 uncaptured: https://images.pexels.com/photos/1629236/pexels-photo-1629236.jpeg
+Level01 captured:  https://images.pexels.com/photos/370799/pexels-photo-370799.jpeg
+Level02 uncaptured: https://images.pexels.com/photos/247671/pexels-photo-247671.jpeg
+Level02 captured:  https://images.pexels.com/photos/1292998/pexels-photo-1292998.jpeg
+Level03 uncaptured: https://images.pexels.com/photos/220072/pexels-photo-220072.jpeg
+Level03 captured:  https://images.pexels.com/photos/3311382/pexels-photo-3311382.jpeg
+Level04 uncaptured: https://images.pexels.com/photos/1561020/pexels-photo-1561020.jpeg
+Level04 captured:  https://images.pexels.com/photos/2983141/pexels-photo-2983141.jpeg
+Level05 uncaptured: https://images.pexels.com/photos/1509534/pexels-photo-1509534.jpeg
+Level05 captured:  https://images.pexels.com/photos/1293120/pexels-photo-1293120.jpeg
+Level06 uncaptured: https://images.pexels.com/photos/2832382/pexels-photo-2832382.jpeg
+Level06 captured:  https://images.pexels.com/photos/255379/pexels-photo-255379.jpeg
+Level07 uncaptured: https://images.pexels.com/photos/1629236/pexels-photo-1629236.jpeg
+Level07 captured:  https://images.pexels.com/photos/1103970/pexels-photo-1103970.jpeg
+Level08 uncaptured: https://images.pexels.com/photos/62693/pexels-photo-62693.jpeg
+Level08 captured:  https://images.pexels.com/photos/3308588/pexels-photo-3308588.jpeg
+Level09 uncaptured: https://images.pexels.com/photos/1939485/pexels-photo-1939485.jpeg
+Level09 captured:  https://images.pexels.com/photos/3255761/pexels-photo-3255761.jpeg
+Level10 uncaptured: https://images.pexels.com/photos/3605420/pexels-photo-3605420.jpeg
+Level10 captured:  https://images.pexels.com/photos/235985/pexels-photo-235985.jpeg
+
+If you want different imagery or different licensing choices (Unsplash, CC0), say which style and I'll swap them.
