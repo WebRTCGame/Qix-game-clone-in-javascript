@@ -258,6 +258,8 @@ export default class Board {
         out[i].id = i+1;
         const hue = (i * 73) % 360; out[i].color = `hsla(${hue}, 65%, 50%, 0.12)`; out[i].strokeColor = `hsla(${hue}, 65%, 40%, 0.6)`;
       }
+      // mark per-cell caveId for overlay-mode caves so callers can look up cave membership
+      for(const oc of out){ if(typeof oc.id === 'number'){ for(const cc of oc.cells){ const cellObj = this.getCell(cc.r, cc.c); if(cellObj) cellObj.caveId = oc.id; } } }
       console.log('Board.detectCaves (overlay mode) -> regions:', regions.length, 'caves:', out.length);
       return out;
     }

@@ -43,3 +43,6 @@ applyTo: '**'
  - Memory updated: 2025-12-06, added Cell class (src/cell.js) and migrated Board to maintain per-cell objects in this.cells
  - Memory updated: 2025-12-06, Board.setCell now keeps numeric grid and Cell.value/metadata in sync; findCapturedCorners, findType2Lines and floodFill/detectCaves were refactored to use per-cell APIs; detectCaves now tags cells with caveId and findType2Lines sets overlayType
  - Memory updated: 2025-12-06, updated Game to use Board.getCell/setCell for capture commit, region fills, spawning logic, projectile bounds and enemy sizing; Draw/HUD remain compatible with overlays and caves but can now leverage per-cell metadata
+ - Memory updated: 2025-12-06, added per-enemy area labels and improved label fallback: compute region map via floodFillRegions when region overlays aren't available and guard against undefined cell lookups so labels reliably render under enemies
+ - Memory updated: 2025-12-06, obstacle placement changed: place rectangular obstacle blocks with minimum size 4x4 to avoid 1x1 obstacles and improve level variety
+ - Memory updated: 2025-12-06, obstacle placement changed: all obstacles are exact 4x4 blocks; player movement now treats obstacles as true walls while capturing; fully-enclosed obstacle blocks are destroyed (converted to filled) when captured

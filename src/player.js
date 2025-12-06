@@ -40,13 +40,33 @@ export default class Player {
     return proj;
   }
 
-  move(dir, dt){
+  // move optionally accepts a reference to game for obstacle collision checks
+  move(dir, dt, game){
     if(!this.alive) return;
     const mag = Math.sqrt(dir.x*dir.x + dir.y*dir.y);
     let nx = 0, ny = 0;
     if(mag>0){ nx = dir.x/mag; ny = dir.y/mag; this.angle = Math.atan2(dir.y, dir.x); }
-    this.x += nx * this.speed * this.speedMul * dt;
-    this.y += ny * this.speed * this.speedMul * dt;
+    // compute proposed new position
+    const stepX = nx * this.speed * this.speedMul * dt;
+    const stepY = ny * this.speed * this.speedMul * dt;
+    const newX = this.x + stepX;
+    const newY = this.y + stepY;
+
+    // If we're capturing and the destination cell is an obstacle, block movement
+    if(game && this.capturing){
+      const curCell = game.cellFor(this.x, this.y);
+      const nextCell = game.cellFor(newX, newY);
+      if(nextCell && curCell && (nextCell.r !== curCell.r || nextCell.c !== curCell.c)){
+        const nc = game.board.getCell(nextCell.r, nextCell.c);
+        if(nc && nc.isObstacle()){
+          // don't enter obstacle cell while capturing; stop movement
+          return;
+        }
+      }
+    }
+
+    this.x = newX;
+    this.y = newY;
     this.x = Math.max(this.radius, Math.min(WIDTH - this.radius, this.x));
     this.y = Math.max(this.radius, Math.min(HEIGHT - this.radius, this.y));
   }

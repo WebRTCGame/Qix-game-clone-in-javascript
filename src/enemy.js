@@ -20,6 +20,8 @@ export default class Enemy{
     this.vx = (Math.random()*2-1) * baseSpeed;
     this.vy = (Math.random()*2-1) * baseSpeed;
     this.radius = baseRadius;
+    this.targetRadius = baseRadius; // desired radius (for smooth transitions)
+    this._radiusLerpSpeed = 6.0; // how quickly radius approaches target (units per second)
     this._lastSpark = 0;
     this._t = Math.random() * 1000;
   }
@@ -77,6 +79,11 @@ export default class Enemy{
         this.vx = Math.cos(ang)*s;
         this.vy = Math.sin(ang)*s;
       }
+    }
+    // smooth radius transition towards targetRadius
+    if(typeof this.targetRadius === 'number'){
+      const t = Math.min(1, dt * this._radiusLerpSpeed);
+      this.radius += (this.targetRadius - this.radius) * t;
     }
   }
 

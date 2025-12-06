@@ -69,11 +69,13 @@ export default class Game {
 
     // For each region, if it contains no enemies, fill it
     let newFilled = 0;
+    // track newly filled cells so we can detect obstacles that become enclosed
+    const newlyFilled = new Set();
     for(const region of regions){
       let hasEnemy = false;
       for(const cell of region.cells){ if(enemyCells.has(cell.r + ',' + cell.c)){ hasEnemy = true; break; } }
       if(!hasEnemy){
-        for(const cell of region.cells){ const cc = this.board.getCell(cell.r, cell.c); if(cc && cc.isEmpty()){ this.board.setCell(cell.r, cell.c, 1); newFilled++; } }
+        for(const cell of region.cells){ const cc = this.board.getCell(cell.r, cell.c); if(cc && cc.isEmpty()){ this.board.setCell(cell.r, cell.c, 1); newFilled++; newlyFilled.add(cell.r + ',' + cell.c); } }
       }
     }
 
@@ -88,6 +90,32 @@ export default class Game {
     if(this.score > (this.highScore || 0)){ this.highScore = this.score; localStorage.setItem('qix_highscore', String(this.highScore)); setHighScore(this.highScore, true); }
     this.captureSlow = false;
     setScore(this.score); setMultiplier(this.multiplier);
+
+    // If our fills enclosed any obstacle blocks, destroy those obstacles
+    try{
+      let destroyedObstacles = 0;
+      const visitedObs = new Array(this.board.rows).fill(0).map(()=>new Array(this.board.cols).fill(false));
+      for(let r=0;r<this.board.rows;r++){
+        for(let c=0;c<this.board.cols;c++){
+          if(visitedObs[r][c]) continue;
+          const oc = this.board.getCell(r,c);
+          if(!oc || !oc.isObstacle()) continue;
+          // collect connected obstacle block
+          const stack = [[r,c]]; const block = [];
+          visitedObs[r][c] = true;
+          while(stack.length){ const [rr,cc] = stack.pop(); block.push({r:rr,c:cc}); const neigh = [[rr-1,cc],[rr+1,cc],[rr,cc-1],[rr,cc+1]]; for(const [nr,nc] of neigh){ if(nr>=0 && nr<this.board.rows && nc>=0 && nc<this.board.cols && !visitedObs[nr][nc]){ const ncCell = this.board.getCell(nr,nc); if(ncCell && ncCell.isObstacle()){ visitedObs[nr][nc] = true; stack.push([nr,nc]); } } } }
+          // determine enclosure: if any neighbor of block touches an empty cell or board boundary -> not enclosed
+          let enclosed = true;
+          for(const cell of block){ const neigh = [[cell.r-1,cell.c],[cell.r+1,cell.c],[cell.r,cell.c-1],[cell.r,cell.c+1]]; for(const [nr,nc] of neigh){ if(nr < 0 || nc < 0 || nr >= this.board.rows || nc >= this.board.cols){ enclosed = false; break; } const ncell = this.board.getCell(nr,nc); if(ncell && ncell.isEmpty()){ enclosed = false; break; } } if(!enclosed) break; }
+          if(enclosed){
+            // destroy block: convert obstacle cells to filled (captured)
+            for(const cell of block){ this.board.setCell(cell.r, cell.c, 1); newlyFilled.add(cell.r + ',' + cell.c); }
+            destroyedObstacles += block.length;
+          }
+        }
+      }
+      if(destroyedObstacles > 0){ this.sound.play && this.sound.play('hit'); if(this.particles) this.particles.add(this.player.x, this.player.y, Math.min(80, destroyedObstacles * 5)); }
+    }catch(e){ /* best-effort: if obstacle clean-up fails don't break capture */ }
 
     // NOTE: enemy sizing will be computed after cave overlays are recomputed below
 
@@ -143,15 +171,8 @@ export default class Game {
         console.log('detectCaves -> used overlayCells=', secondaryOverlays.length, 'caves=', this.caveOverlays.length);
         // update HUD with caves
         try{ setCaves(this.caveOverlays || []); }catch(e){ /* ignore if HUD not present */ }
-        // Now size enemies according to the cave/area they occupy. Smaller area => smaller enemy.
-        try{
-            if(this.caveOverlays && this.caveOverlays.length){
-            for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-          } else {
-            // fallback to region (cellToRegion from earlier)
-            for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = reg.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-          }
-        }catch(e){ /* sizing best-effort; ignore failures */ }
+        // Now size enemies according to their current area/cave using cell metadata
+        try{ this.updateEnemySizes(); }catch(e){ /* ignore */ }
       }catch(e){ this.caveOverlays = []; try{ setCaves([]); }catch(_){} }
     }catch(e){ this.specialOverlays = []; }
   }
@@ -210,18 +231,7 @@ export default class Game {
     this._enemySizeTimer += dt;
     if(this._enemySizeTimer >= this._enemySizeInterval){
       this._enemySizeTimer = 0;
-      try{
-          if(this.caveOverlays && this.caveOverlays.length){
-          for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-        } else {
-          // fallback using flood-fill partitions when caves not available
-          const regions = this.board.floodFillRegions();
-          const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
-          const cellToRegion = {};
-          for(let i=0;i<regions.length;i++){ for(const cell of regions[i].cells) cellToRegion[cell.r + ',' + cell.c] = i; }
-          for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-        }
-      } catch(e){ /* ignore sizing errors */ }
+      try{ this.updateEnemySizes(); }catch(e){ /* ignore sizing errors */ }
     }
 
     // update sparks
@@ -327,7 +337,7 @@ export default class Game {
       this.fuse.idleTimer = 0;
       if(this.fuse.active) { this.fuse.active = false; this.fuse.progress = 0; }
       // move player
-      this.player.move(dir, dt);
+      this.player.move(dir, dt, this);
       const playerCell = this.cellFor(this.player.x, this.player.y);
       const pcell = this.board.getCell(playerCell.r, playerCell.c);
       if(pcell && pcell.isEmpty()){
@@ -431,8 +441,8 @@ export default class Game {
       const rid = cellToRegion[cell.r + ',' + cell.c];
       if(typeof rid === 'number'){
         const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS));
-        const newRad = 6 + Math.floor(ratio * 300);
-        e.radius = Math.max(3, Math.floor(newRad * 0.2));
+        const target = Math.max(3, Math.floor(3 + ratio * 30));
+        e.targetRadius = target;
       }
       // ensure it isn't spawned right on top of player
       const dx = e.x - this.player.x; const dy = e.y - this.player.y; const d = Math.hypot(dx,dy)||1;
@@ -463,6 +473,43 @@ export default class Game {
     }
 
     // done
+  }
+
+  // Update enemy sizes based on which area/cave they occupy.
+  // Prefer per-cell caveId when available; otherwise fall back to flood-fill regions.
+  updateEnemySizes(){
+    try{
+      // prefer cave overlays when available
+      if(this.caveOverlays && this.caveOverlays.length){
+        for(const enemy of this.enemies){
+          const cell = this.cellFor(enemy.x, enemy.y);
+          const cellObj = this.board.getCell(cell.r, cell.c);
+          const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined;
+          if(typeof cid === 'number' && this.caveOverlays[cid]){
+            const cav = this.caveOverlays[cid];
+            const ratio = cav.cells.length / (COLS * ROWS);
+            const target = Math.max(3, Math.floor(3 + ratio * 30));
+            enemy.targetRadius = target;
+            continue;
+          }
+          // if cell not in a cave, try fallback to region-based sizing
+          const regions = this.board.floodFillRegions();
+          const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
+          const cellToRegion = {};
+          for(let i=0;i<regions.length;i++){ for(const c of regions[i].cells) cellToRegion[c.r + ',' + c.c] = i; }
+          const rid = cellToRegion[cell.r + ',' + cell.c];
+          if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const target = Math.max(3, Math.floor(3 + ratio * 30)); enemy.targetRadius = target; }
+        }
+        return;
+      }
+
+      // No caves: use flood-fill regions
+      const regions = this.board.floodFillRegions();
+      const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
+      const cellToRegion = {};
+      for(let i=0;i<regions.length;i++){ for(const c of regions[i].cells) cellToRegion[c.r + ',' + c.c] = i; }
+      for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const target = Math.max(3, Math.floor(3 + ratio * 30)); enemy.targetRadius = target; } }
+    } catch(e){ /* best-effort sizing; ignore failures */ }
   }
 
   updatePercent(){
@@ -705,8 +752,42 @@ export default class Game {
       Draw.regions(this.ctx, [{ cells: this._debugLeakOverlay.cells, color: 'rgba(48,200,255,0.45)', debug:true }], CELL);
     } else { this._debugLeakOverlay = null; }
     Draw.trail(this.ctx, this.trail, this.fuse, this.captureSlow);
+    // build quick cell->region map for regionOverlays fallback (ensure we always have a fallback)
+    const regionMap = {};
+    if(this.regionOverlays && this.regionOverlays.length){
+      for(let i=0;i<this.regionOverlays.length;i++){
+        const id = i + 1;
+        for(const cell of this.regionOverlays[i].cells){ regionMap[cell.r + ',' + cell.c] = id; }
+      }
+    } else {
+      // If region overlays aren't available compute regions now so labels can still show
+      try{
+        const regions = this.board.floodFillRegions();
+        for(let i=0;i<regions.length;i++){
+          const id = i + 1;
+          for(const cell of regions[i].cells){ regionMap[cell.r + ',' + cell.c] = id; }
+        }
+      }catch(_){ /* best-effort fallback - ignore errors */ }
+    }
     for(const enemy of this.enemies){
       Draw.enemy(this.ctx, enemy);
+      // show area id under enemies: prefer per-cell caveId then region index
+      const cell = this.cellFor(enemy.x, enemy.y);
+      if(!cell) continue;
+      const cellObj = this.board.getCell(cell.r, cell.c);
+      let areaId = (cellObj && cellObj.caveId) || regionMap[cell.r + ',' + cell.c] || null;
+      if(areaId){
+        this.ctx.save();
+        const lbl = String(areaId);
+        this.ctx.font = 'bold 12px sans-serif';
+        this.ctx.textAlign = 'center'; this.ctx.textBaseline = 'top';
+        // background pill
+        const w = Math.max(18, this.ctx.measureText(lbl).width + 8);
+        const x = enemy.x - w/2, y = enemy.y + (enemy.radius || 6) + 4;
+        this.ctx.fillStyle = 'rgba(0,0,0,0.6)'; this.ctx.fillRect(x, y, w, 18);
+        this.ctx.fillStyle = '#fff'; this.ctx.fillText(lbl, enemy.x, y + 2);
+        this.ctx.restore();
+      }
     }
     // powerups + projectiles
     for(const pu of this.powerups) Draw.powerup(this.ctx, pu);
@@ -788,19 +869,40 @@ export default class Game {
     // add obstacles for this level (mark grid cells with 2)
     this.powerups = [];
     this.projectiles = [];
+    // Place rectangular obstacles with minimum size 4x4 to avoid single-cell obstacles
     const obstacleCount = Math.min(60, Math.floor(this.level * 1.5) + (this.currentLevel ? this.currentLevel.obstacles : 0));
+    const obstacleSize = 4; // fixed blocks exactly 4x4
     let placed = 0, tries = 0;
-    while(placed < obstacleCount && tries++ < 1000){
-      const r = 1 + Math.floor(Math.random() * (ROWS-2));
-      const c = 1 + Math.floor(Math.random() * (COLS-2));
-      const oc = this.board.getCell(r,c); if(!oc || !oc.isEmpty()) continue;
-      // avoid placing obstacles on top of an enemy or player
-      let blocked = false;
-      for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec.r === r && ec.c === c){ blocked = true; break; } }
-      const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
-      if(pcell.r === r && pcell.c === c) blocked = true;
-      if(blocked) continue;
-      this.board.setCell(r,c,2); placed++;
+    // Try to place 'obstacleCount' obstacle blocks (each block >= minObstacleSize x minObstacleSize)
+    while(placed < obstacleCount && tries++ < 5000){
+      // pick a random width/height for the block
+      const w = obstacleSize;
+      const h = obstacleSize;
+      // pick top-left anchor ensuring the block stays inside interior cells
+      const r = 1 + Math.floor(Math.random() * Math.max(1, (ROWS - 2) - h + 1));
+      const c = 1 + Math.floor(Math.random() * Math.max(1, (COLS - 2) - w + 1));
+
+      // validate all cells in candidate block are empty and not occupied by an enemy/player
+      let ok = true;
+      for(let rr = r; rr < r + h && ok; rr++){
+        for(let cc = c; cc < c + w; cc++){
+          const oc = this.board.getCell(rr, cc);
+          if(!oc || !oc.isEmpty()){ ok = false; break; }
+          // avoid placing obstacles on top of an enemy or player
+          for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec && ec.r === rr && ec.c === cc){ ok = false; break; } }
+          const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
+          if(pcell && pcell.r === rr && pcell.c === cc) { ok = false; break; }
+        }
+      }
+      if(!ok) continue;
+
+      // commit block
+      for(let rr = r; rr < r + h; rr++){
+        for(let cc = c; cc < c + w; cc++){
+          this.board.setCell(rr, cc, 2);
+        }
+      }
+      placed++;
     }
     // spawn a few powerups (grey boxes) in empty cells
     const puCount = (this.currentLevel?.powerups ?? 1) + Math.floor(this.level / 5);
@@ -840,19 +942,7 @@ export default class Game {
     setLevel(this.level);
     setMultiplier(this.multiplier);
 
-    // assign enemy size based on perceived region after obstacles placed
-    try{
-      // Prefer cave overlays when available so enemy sizes reflect computed areas.
-      if(this.caveOverlays && this.caveOverlays.length){
-        for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const cellObj = this.board.getCell(cell.r, cell.c); const cid = cellObj && cellObj.caveId ? (cellObj.caveId - 1) : undefined; if(typeof cid === 'number'){ const cav = this.caveOverlays[cid]; const ratio = cav.cells.length / (COLS * ROWS); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-      } else {
-        const regions = this.board.floodFillRegions();
-        const totalEmpty = regions.reduce((s,r)=>s + r.cells.length, 0);
-        // map cells to region id
-        const cellToRegion = {};
-        for(let i=0;i<regions.length;i++){ for(const cell of regions[i].cells) cellToRegion[cell.r + ',' + cell.c] = i; }
-        for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const newRad = 6 + Math.floor(ratio * 300); enemy.radius = Math.max(3, Math.floor(newRad * 0.2)); } }
-      }
-    } catch(e) { /* best-effort sizing; ignore failures */ }
+    // set initial sizes for enemies based on area they occupy (using per-cell metadata when possible)
+    try{ this.updateEnemySizes(); }catch(e){ /* ignore sizing errors */ }
   }
 }
