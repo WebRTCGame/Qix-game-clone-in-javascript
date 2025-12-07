@@ -1,0 +1,31 @@
+{
+  "name": "Rotating Ring",
+  "bg": "#0a0f1a",
+  "fill": "#3fe0ff",
+  "bgUncaptured": "assets/backgrounds/level12/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level12/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level12-main.png", "minion": "assets/sprites/enemies/minion/level12-minion.png", "projectile": "assets/sprites/projectiles/level12-proj.png", "powerup": "assets/sprites/powerups/level12-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level12-obstacle.png",
+  "main": { "hp": 10, "color": "#33aaff", "x": 400, "y": 220, "pattern": "ring" },
+  "minions": [
+    { "x": 100, "y": 200 },
+    { "x": 700, "y": 200 },
+    { "x": 200, "y": 600 },
+    { "x": 600, "y": 600 },
+    { "x": 520, "y": 160 },
+    { "x": 280, "y": 520 }
+  ],
+  "delayedSpawns": [
+    { "x": 400, "y": 100, "delay": 6, "type": "minion", "config": { "pattern": "swerve" } },
+    { "x": 240, "y": 240, "delay": 12, "type": "miniboss", "config": { "hp": 8, "pattern": "patrol" } }
+  ],
+  "obstacles": [
+    { "r": 18, "c": 22, "w": 6, "h": 6 },
+    { "r": 30, "c": 40, "w": 8, "h": 4 }
+  ],
+  "powerups": 3,
+  "enemyConfig": {
+    "main": { "minSpeed": 70, "maxSpeed": 120, "acceleration": 10, "minSize": 10, "maxSize": 16, "hp": 10 },
+    "minion": { "minSpeed": 80, "maxSpeed": 160, "acceleration": 13, "minSize": 5, "maxSize": 9 }
+  }
+}

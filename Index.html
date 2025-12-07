@@ -6,29 +6,40 @@
 		<meta name="viewport" content="width=device-width,initial-scale=1" />
 		<title>Qix Clone</title>
 		<link rel="stylesheet" href="styles.css">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 		<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%23000'/%3E%3Ccircle cx='8' cy='8' r='6' fill='%23ffcc00'/%3E%3C/svg%3E">
 	</head>
 	<body>
 		<div id="game-root">
 			<canvas id="game-canvas" width="800" height="800"></canvas>
 			<div id="hud">
-				<div id="level">Level: 1</div>
-	                <div id="levelname">Stage:</div>
-				<div id="percent">Captured: 0%</div>
-				<div id="score">Score: 0</div>
-				<div id="highscore">High: 0</div>
-				<div id="lives">Lives: 3</div>
-				<div id="enemies">Enemies: 0 of 0</div>
-				<div id="bosshp"></div>
-				<div id="powerup"></div>
-				<div id="ammo"></div>
-				<div id="mult">Multiplier: x1</div>
-				<div id="super"> </div>
-				<div id="status">Status: Ready</div>
-								<div id="areas">
-									<div id="areas-count">Areas: 0</div>
-									<div id="areas-list" style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px"></div>
-								</div>
+				<div class="hud-left">
+					<div id="level">LVL: 01</div>
+					<div id="levelname">STAGE: Neo City</div>
+				</div>
+				<div class="hud-center">
+					<div id="score" class="score-block"><div class="label">SCORE</div><div class="digits"></div></div>
+					<div id="highscore" class="score-block"><div class="label">HI-SCORE</div><div class="digits"></div></div>
+					<div id="percent" class="percent">0%</div>
+				</div>
+				<div class="hud-right">
+					<div id="lives"></div>
+					<div id="enemies">ENEMIES: 0/0</div>
+					<div id="ammo">AMMO: 0</div>
+					<div id="mult">MULT: x1</div>
+				</div>
+				<div id="hud-bottom">
+					<div id="bosshp"></div>
+					<div id="powerup"></div>
+					<div id="super"></div>
+					<div id="status">READY</div>
+				</div>
+				<div id="areas">
+					<div id="areas-count">Areas: 0</div>
+					<div id="areas-list" style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px"></div>
+				</div>
 				<div id="controls">Arrows/WASD: Move · Shift: Slow draw (double points) · R: Restart · P: Pause</div>
 			</div>
 		</div>

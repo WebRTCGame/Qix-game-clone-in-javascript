@@ -1,0 +1,30 @@
+{
+  "name": "Aether Lab",
+  "visualDescription": "Rotating turret / technical backdrop",
+  "bg": "#141018",
+  "fill": "#b37bff",
+  "bgUncaptured": "assets/backgrounds/level04/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level04/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level04-main.png", "minion": "assets/sprites/enemies/minion/level04-minion.png", "projectile": "assets/sprites/projectiles/level04-proj.png", "powerup": "assets/sprites/powerups/level04-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level04-obstacle.png",
+  "main": { "hp": 5, "color": "#ffd166", "x": 420, "y": 180, "pattern": "turret" },
+  "minions": [
+    { "x": 120, "y": 520 },
+    { "x": 680, "y": 520 },
+    { "x": 200, "y": 280 },
+    { "x": 600, "y": 280 },
+    { "x": 400, "y": 380 }
+  ],
+  "obstacles": [
+    { "r": 12, "c": 16, "w": 6, "h": 6 },
+    { "r": 28, "c": 44, "w": 8, "h": 4 },
+    { "r": 46, "c": 60, "w": 4, "h": 8 }
+  ],
+  "powerups": 2,
+  "completionBonus": { "type": "turret_clear", "value": 2500 }
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 45, "maxSpeed": 90, "acceleration": 7, "minSize": 7, "maxSize": 14 },
+    "minion": { "minSpeed": 55, "maxSpeed": 130, "acceleration": 10, "minSize": 4, "maxSize": 7 }
+  }
+}

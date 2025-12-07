@@ -1,0 +1,29 @@
+{
+  "name": "Industrial Sector",
+  "visualDescription": "Industrial / cityscape",
+  "bg": "#101218",
+  "fill": "#e07bff",
+  "bgUncaptured": "assets/backgrounds/level11/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level11/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level11-main.png", "minion": "assets/sprites/enemies/minion/level11-minion.png", "projectile": "assets/sprites/projectiles/level11-proj.png", "powerup": "assets/sprites/powerups/level11-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level11-obstacle.png",
+  "main": { "hp": 9, "color": "#ff8800", "x": 420, "y": 200, "pattern": "aoe" },
+  "minions": [
+    { "x": 120, "y": 120 },
+    { "x": 680, "y": 120 },
+    { "x": 160, "y": 640 },
+    { "x": 640, "y": 640 },
+    { "x": 320, "y": 480 },
+    { "x": 480, "y": 320 }
+  ],
+  "obstacles": [
+    { "r": 12, "c": 20, "w": 8, "h": 6 },
+    { "r": 32, "c": 28, "w": 8, "h": 8 }
+  ],
+  "powerups": 2,
+  "enemyConfig": {
+    "main": { "minSpeed": 65, "maxSpeed": 115, "acceleration": 9, "minSize": 9, "maxSize": 16, "hp": 9, "color": "#ff8800" },
+    "minion": { "minSpeed": 70, "maxSpeed": 150, "acceleration": 12, "minSize": 4, "maxSize": 8 }
+  },
+  "completionBonus": { "type": "special_explosion", "value": 8000, "note": "bonus for destroying main before completing capture" }
+}

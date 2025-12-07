@@ -5,25 +5,42 @@ const TWO_PI = Math.PI*2;
 
 export default class Enemy{
   // type: 'minion' | 'main'
-  constructor(x,y, type='minion'){
+  constructor(x,y, type='minion', cfg = {}){
     this.x = x; this.y = y;
     this.type = type;
-    // base speed + size depend on type
+    // apply configuration if present
+    this.config = cfg || {};
+    // base speed + size depend on type or provided config
     let baseSpeed = 70 * 0.75; // default
+    if(typeof this.config.minSpeed === 'number' && typeof this.config.maxSpeed === 'number'){
+      baseSpeed = this.config.minSpeed + Math.random() * (this.config.maxSpeed - this.config.minSpeed);
+    }
     let baseRadius = (8 + Math.random()*6) * 0.2;
+    if(typeof this.config.minSize === 'number' && typeof this.config.maxSize === 'number'){
+      baseRadius = this.config.minSize + Math.random() * (this.config.maxSize - this.config.minSize);
+    }
     if(type === 'main'){
       baseSpeed *= 0.6; baseRadius = Math.max(baseRadius * 1.8, 6);
-      this.color = '#ff4500'; this.hp = 3;
+      this.color = this.config.color || '#ff4500';
+      this.hp = typeof this.config.hp === 'number' ? this.config.hp : 3;
     } else {
-      this.color = '#8b00ff'; this.hp = 1;
+      this.color = this.config.color || '#8b00ff';
+      this.hp = typeof this.config.hp === 'number' ? this.config.hp : 1;
     }
     this.vx = (Math.random()*2-1) * baseSpeed;
     this.vy = (Math.random()*2-1) * baseSpeed;
     this.radius = baseRadius;
     this.targetRadius = baseRadius; // desired radius (for smooth transitions)
     this._radiusLerpSpeed = 6.0; // how quickly radius approaches target (units per second)
+    if(typeof this.config.radiusLerpSpeed === 'number') this._radiusLerpSpeed = this.config.radiusLerpSpeed;
+    // optional acceleration and maxSpeed from config
+    this.acceleration = typeof this.config.acceleration === 'number' ? this.config.acceleration : 0;
+    this.maxSpeed = typeof this.config.maxSpeed === 'number' ? this.config.maxSpeed : 120;
     this._lastSpark = 0;
     this._t = Math.random() * 1000;
+    // optional behavior pattern (hover|orbit|patrol|aggro for mains; follow|swerve for minions)
+    this.pattern = typeof this.config.pattern === 'string' ? this.config.pattern : null;
+    this.isMiniBoss = !!this.config.isMiniBoss;
   }
 
   update(dt, game){
@@ -63,21 +80,43 @@ export default class Enemy{
 
     // behavior variations
     this._t += dt;
-    if(this.type === 'main'){
-      // main enemy drifts on a slow circular/sine pattern
+    if(this.type === 'main' || this.type === 'miniboss'){
+      // main/miniboss behavior: allow per-level pattern overrides
       const amp = 40 + (this.hp||3) * 4;
-      this.vx += Math.cos(this._t*0.5) * 10 * dt;
-      this.vy += Math.sin(this._t*0.5) * 10 * dt;
+      if(this.pattern === 'orbit'){
+        this.vx += Math.cos(this._t*0.5) * (8 + amp*0.02) * dt;
+        this.vy += Math.sin(this._t*0.5) * (8 + amp*0.02) * dt;
+      } else if(this.pattern === 'patrol'){
+        this.vx += Math.cos(this._t*0.35) * 6 * dt;
+        this.vy += Math.sin(this._t*0.45) * 6 * dt;
+      } else if(this.pattern === 'aggro' && game && game.player){
+        const dx = this.x - game.player.x, dy = this.y - game.player.y; const d = Math.hypot(dx,dy)||1;
+        this.vx += (dx/d) * 6 * Math.sin(this._t*0.6) * dt;
+        this.vy += (dy/d) * 6 * Math.cos(this._t*0.6) * dt;
+      } else {
+        // default drift
+        this.vx += Math.cos(this._t*0.5) * 10 * dt;
+        this.vy += Math.sin(this._t*0.5) * 10 * dt;
+      }
       // clamp speed a bit
       const sp = Math.hypot(this.vx, this.vy) || 1;
-      const maxSp = 120;
+      const maxSp = this.maxSpeed || 120;
       if(sp > maxSp){ this.vx = (this.vx/sp) * maxSp; this.vy = (this.vy/sp) * maxSp; }
     } else {
-      if(Math.random() < 0.01) {
-        const ang = Math.random()*TWO_PI;
-        const s = (40 + Math.random()*80) * 0.75;
-        this.vx = Math.cos(ang)*s;
-        this.vy = Math.sin(ang)*s;
+      // minion pattern-based behavior
+      if(this.pattern === 'follow' && game && game.player){
+        if(Math.random() < 0.02){ const ang = Math.atan2(game.player.y - this.y, game.player.x - this.x); const s = (this.config.minSpeed + this.config.maxSpeed)/2 || 60; this.vx = Math.cos(ang)*s; this.vy = Math.sin(ang)*s; }
+      } else if(this.pattern === 'swerve'){
+        if(Math.random() < 0.02){ const ang = Math.random()*TWO_PI; const s = this.config.minSpeed + Math.random()*(this.config.maxSpeed - this.config.minSpeed); this.vx = Math.cos(ang)*s; this.vy = Math.sin(ang)*s; }
+      } else {
+        if(Math.random() < 0.01) {
+          const ang = Math.random()*TWO_PI;
+          const minS = (this.config && this.config.minSpeed) ? this.config.minSpeed : 30;
+          const maxS = (this.config && this.config.maxSpeed) ? this.config.maxSpeed : 120;
+          const s = minS + Math.random() * (maxS - minS);
+          this.vx = Math.cos(ang)*s;
+          this.vy = Math.sin(ang)*s;
+        }
       }
     }
     // smooth radius transition towards targetRadius

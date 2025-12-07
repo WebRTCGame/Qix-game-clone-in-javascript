@@ -1,0 +1,30 @@
+{
+  "name": "Machine Sprawl",
+  "visualDescription": "Dense mechanical sprawl with intersecting nodes",
+  "bg": "#081020",
+  "fill": "#7be0ff",
+  "bgUncaptured": "assets/backgrounds/level09/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level09/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level09-main.png", "minion": "assets/sprites/enemies/minion/level09-minion.png", "projectile": "assets/sprites/projectiles/level09-proj.png", "powerup": "assets/sprites/powerups/level09-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level09-obstacle.png",
+  "main": { "hp": 9, "color": "#ff7700", "x": 420, "y": 240, "pattern": "orbit" },
+  "minions": [
+    { "x": 160, "y": 160 },
+    { "x": 640, "y": 160 },
+    { "x": 160, "y": 640 },
+    { "x": 640, "y": 640 },
+    { "x": 320, "y": 320, "pattern": "follow" },
+    { "x": 480, "y": 480, "pattern": "swerve" }
+  ],
+  "obstacles": [
+    { "r": 12, "c": 14, "w": 8, "h": 6 },
+    { "r": 30, "c": 34, "w": 10, "h": 8 },
+    { "r": 52, "c": 54, "w": 6, "h": 6 }
+  ],
+  "powerups": 2
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 75, "maxSpeed": 125, "acceleration": 10, "minSize": 10, "maxSize": 18 },
+    "minion": { "minSpeed": 85, "maxSpeed": 180, "acceleration": 14, "minSize": 5, "maxSize": 9 }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "Iron Heart",
+  "visualDescription": "Large machine/boss sprite",
+  "bg": "#0f0f10",
+  "fill": "#a0a0ff",
+  "bgUncaptured": "assets/backgrounds/level07/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level07/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level07-main.png", "minion": "assets/sprites/enemies/minion/level07-minion.png", "projectile": "assets/sprites/projectiles/level07-proj.png", "powerup": "assets/sprites/powerups/level07-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level07-obstacle.png",
+  "main": { "hp": 8, "color": "#ff8844", "x": 400, "y": 180, "pattern": "burst" },
+  "minions": [
+    { "x": 120, "y": 240 },
+    { "x": 680, "y": 240 },
+    { "x": 240, "y": 560 },
+    { "x": 560, "y": 560 },
+    { "x": 400, "y": 420 },
+    { "x": 300, "y": 350 }
+  ],
+  "obstacles": [
+    { "r": 12, "c": 12, "w": 8, "h": 6 },
+    { "r": 34, "c": 36, "w": 6, "h": 8 },
+    { "r": 52, "c": 52, "w": 4, "h": 6 }
+  ],
+  "powerups": 3
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 60, "maxSpeed": 110, "acceleration": 9, "minSize": 9, "maxSize": 16 },
+    "minion": { "minSpeed": 70, "maxSpeed": 160, "acceleration": 12, "minSize": 4, "maxSize": 8 }
+  }
+}

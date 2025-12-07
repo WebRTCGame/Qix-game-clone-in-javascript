@@ -1,0 +1,29 @@
+{
+  "name": "Verdant Core",
+  "visualDescription": "Battleship / plateau background",
+  "bg": "#06130c",
+  "fill": "#63c36b",
+  "bgUncaptured": "assets/backgrounds/level02/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level02/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level02-main.png", "minion": "assets/sprites/enemies/minion/level02-minion.png", "projectile": "assets/sprites/projectiles/level02-proj.png", "powerup": "assets/sprites/powerups/level02-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level02-obstacle.png",
+  "main": { "hp": 5, "color": "#ff8c00", "x": 420, "y": 200, "pattern": "turret" },
+  "minions": [
+    { "x": 120, "y": 120 },
+    { "x": 680, "y": 120 },
+    { "x": 400, "y": 680 },
+    { "x": 200, "y": 420 }
+  ],
+  "obstacles": [
+    { "r": 10, "c": 8, "w": 6, "h": 6 },
+    { "r": 25, "c": 36, "w": 6, "h": 4 },
+    { "r": 44, "c": 54, "w": 6, "h": 4 }
+  ],
+  "powerups": 1,
+  "completionBonus": { "type": "axis_shot", "value": 2000, "note": "bonus when main is shot early" }
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 35, "maxSpeed": 80, "acceleration": 6, "minSize": 6, "maxSize": 12 },
+    "minion": { "minSpeed": 45, "maxSpeed": 110, "acceleration": 8, "minSize": 3, "maxSize": 6 }
+  }
+}

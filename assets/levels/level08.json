@@ -1,0 +1,31 @@
+{
+  "name": "Final Node",
+  "visualDescription": "Landscape with multiple obstacles",
+  "bg": "#08080b",
+  "fill": "#f0e68c",
+  "bgUncaptured": "assets/backgrounds/level08/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level08/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level08-main.png", "minion": "assets/sprites/enemies/minion/level08-minion.png", "projectile": "assets/sprites/projectiles/level08-proj.png", "powerup": "assets/sprites/powerups/level08-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level08-obstacle.png",
+  "main": { "hp": 10, "color": "#ff3333", "x": 420, "y": 200, "pattern": "multi" },
+  "minions": [
+    { "x": 120, "y": 120 },
+    { "x": 680, "y": 120 },
+    { "x": 120, "y": 680 },
+    { "x": 680, "y": 680 },
+    { "x": 400, "y": 400 },
+    { "x": 200, "y": 400 },
+    { "x": 600, "y": 400 }
+  ],
+  "obstacles": [
+    { "r": 10, "c": 40, "w": 10, "h": 6 },
+    { "r": 26, "c": 12, "w": 8, "h": 4 },
+    { "r": 44, "c": 54, "w": 6, "h": 6 }
+  ],
+  "powerups": 3
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 70, "maxSpeed": 120, "acceleration": 10, "minSize": 10, "maxSize": 18 },
+    "minion": { "minSpeed": 80, "maxSpeed": 170, "acceleration": 13, "minSize": 5, "maxSize": 9 }
+  }
+}

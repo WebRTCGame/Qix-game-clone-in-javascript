@@ -1,0 +1,32 @@
+{
+  "name": "Heavy Obstruction",
+  "visualDescription": "Massive blocks and chokepoints constrict movement",
+  "bg": "#121217",
+  "fill": "#f9e07b",
+  "bgUncaptured": "assets/backgrounds/level15/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level15/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level15-main.png", "minion": "assets/sprites/enemies/minion/level15-minion.png", "projectile": "assets/sprites/projectiles/level15-proj.png", "powerup": "assets/sprites/powerups/level15-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level15-obstacle.png",
+  "main": { "hp": 13, "color": "#ff3311", "x": 420, "y": 180, "pattern": "bulwark" },
+  "minions": [
+    { "x": 120, "y": 120 },
+    { "x": 680, "y": 120 },
+    { "x": 120, "y": 680 },
+    { "x": 680, "y": 680 },
+    { "x": 320, "y": 320 },
+    { "x": 480, "y": 480 },
+    { "x": 250, "y": 250 },
+    { "x": 520, "y": 520 }
+  ],
+  "obstacles": [
+    { "r": 10, "c": 10, "w": 12, "h": 6 },
+    { "r": 30, "c": 30, "w": 10, "h": 8 },
+    { "r": 52, "c": 52, "w": 6, "h": 6 }
+  ],
+  "powerups": 3,
+  "enemyConfig": {
+    "main": { "minSpeed": 80, "maxSpeed": 140, "acceleration": 11, "minSize": 12, "maxSize": 20, "hp": 13 },
+    "minion": { "minSpeed": 90, "maxSpeed": 190, "acceleration": 15, "minSize": 6, "maxSize": 10 }
+  },
+  "completionBonus": { "type": "final_burst", "value": 15000, "note": "special end-level asset" }
+}

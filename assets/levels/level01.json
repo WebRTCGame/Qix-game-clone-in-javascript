@@ -1,0 +1,30 @@
+{
+  "name": "Neo City",
+  "visualDescription": "Intro sci-fi / initial empty field",
+  "bg": "#0b1220",
+  "fill": "#1e90ff",
+  "bgUncaptured": "assets/backgrounds/level01/level1 background.jpg",
+  "bgCaptured": "assets/backgrounds/level01/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level01-main.png", "minion": "assets/sprites/enemies/minion/level01-minion.png", "projectile": "assets/sprites/projectiles/level01-proj.png", "powerup": "assets/sprites/powerups/level01-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level01-obstacle.png",
+  "main": { "hp": 4, "color": "#ff4500", "x": 400, "y": 160, "pattern": "patrol" },
+  "minions": [
+    { "x": 120, "y": 240 },
+    { "x": 680, "y": 240 },
+    { "x": 240, "y": 520 },
+    { "x": 560, "y": 520 }
+  ],
+  "obstacles": [
+    { "r": 14, "c": 10, "w": 4, "h": 4 },
+    { "r": 14, "c": 26, "w": 6, "h": 4 },
+    { "r": 30, "c": 44, "w": 8, "h": 6 },
+    { "r": 50, "c": 12, "w": 10, "h": 6 }
+  ],
+  "powerups": 1,
+  "completionBonus": { "type": "intro", "value": 1000, "note": "small intro completion bonus" }
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 30, "maxSpeed": 70, "acceleration": 6, "minSize": 6, "maxSize": 10 },
+    "minion": { "minSpeed": 40, "maxSpeed": 100, "acceleration": 8, "minSize": 3, "maxSize": 6 }
+  }
+}

@@ -266,7 +266,15 @@ export default class Game {
             setScore(this.score);
             setEnemies(this.enemies.length, this.levelEnemyTotal);
             if(wasMain){
+              // award optional level-specific completion bonus when main is destroyed
+              const bonus = Number(this.currentLevel?.completionBonus?.value || 0);
+              if(bonus > 0){
+                this.score += bonus * this.multiplier; // scale bonus by multiplier
+                setScore(this.score);
+                this._floatingTexts.push({ text: `+${bonus}`, x: e.x, y: e.y, size: 22, color: '#ffd700', life: 2.0 });
+              }
               setStatus('Main enemy destroyed! Level Cleared');
+              setBossHP(null);
               setTimeout(()=>{ this.nextLevel(); }, 700);
               return; // bail from update because level will reset
             }
@@ -434,7 +442,7 @@ export default class Game {
         if(cc && cc.isEmpty()){ const w = this.worldForCell(r,c); ex=w.x; ey=w.y; break; }
       }
       if(ex===0 && ey===0){ ex = 200 + Math.random()*400; ey = 200 + Math.random()*400; }
-      const e = new Enemy(ex, ey, 'minion');
+      const e = new Enemy(ex, ey, 'minion', this.currentLevel?.enemyConfig?.minion || {});
       e.vx *= 1 + this.level*0.03; e.vy *= 1 + this.level*0.03;
       // size enemy relative to its region if known
       const cell = this.cellFor(e.x, e.y);
@@ -736,7 +744,8 @@ export default class Game {
     }
 
     // use current level's fill color for captured regions
-    Draw.grid(this.ctx, this.grid, CELL, { fillColor: this.currentLevel?.fill || this.levelArt[(this.level) % this.levelArt.length], obstacleColor: '#444', drawFilled: !skipFilled });
+    const defaultFill = (this.currentLevel && this.currentLevel.fill) ? this.currentLevel.fill : '#1e90ff';
+    Draw.grid(this.ctx, this.grid, CELL, { fillColor: defaultFill, obstacleColor: '#444', drawFilled: !skipFilled });
     // draw nearly-transparent overlays for perceived regions
     if(this.regionOverlays && this.regionOverlays.length){ Draw.regions(this.ctx, this.regionOverlays, CELL); }
     // cave overlays (uncaptured chambers)
@@ -821,92 +830,140 @@ export default class Game {
     this.trail = [];
     if(this.player) this.player.capturing = false;
     this.level = 0; this.multiplier = 1; this.score = 0; this.lives = 3;
-    this.nextLevel();
-    this.lives = 3; this.score = 0;
-    setScore(this.score); setLives(this.lives);
-    if(!this.running){
-      this.running = true;
-      this.last = performance.now(); this.accumulator = 0; this.rafId = requestAnimationFrame(this._frame.bind(this));
-    }
-    setStatus('Ready');
+    // ensure the async level setup finishes before starting the main loop
+    this.nextLevel().then(()=>{
+      this.lives = 3; this.score = 0;
+      setScore(this.score); setLives(this.lives);
+      if(!this.running){
+        this.running = true;
+        this.last = performance.now(); this.accumulator = 0; this.rafId = requestAnimationFrame(this._frame.bind(this));
+      }
+      setStatus('Ready');
+    }).catch(e => { console.error('Failed to load next level:', e); setStatus('Error loading level'); });
   }
 
-  nextLevel(){
-    // increment level and spawn more enemies
+  async nextLevel(){
+    // increment level and wrap to available levels (keep 1..count)
     this.level += 1;
-    // pick level data
-    this.currentLevel = LEVELS[(this.level-1) % LEVELS.length];
-    // load per-level background images if present in assets/backgrounds/levelNN
+    try{ const max = LEVELS.count || 1; this.level = ((this.level - 1) % max) + 1; }catch(e){ /* ignore */ }
+    // fetch per-level JSON (deterministic level data)
+    this.currentLevel = await LEVELS.loadLevel(this.level);
+    console.log('Loaded level JSON:', this.level, this.currentLevel?.name || '(unnamed)');
+    // load per-level background images; allow JSON to override image paths
     try{
-      const idx = String(this.level).padStart(2,'0');
-      this.bgUncaptured = new Image(); this.bgUncaptured.src = `assets/backgrounds/level${idx}/uncaptured.jpg`;
-      this.bgCaptured = new Image(); this.bgCaptured.src = `assets/backgrounds/level${idx}/captured.jpg`;
+      this.bgUncaptured = new Image(); this.bgUncaptured.src = this.currentLevel?.bgUncaptured || `assets/backgrounds/level${String(this.level).padStart(2,'0')}/uncaptured.png`;
+      this.bgCaptured = new Image(); this.bgCaptured.src = this.currentLevel?.bgCaptured || `assets/backgrounds/level${String(this.level).padStart(2,'0')}/captured.png`;
     }catch(e){ this.bgUncaptured = null; this.bgCaptured = null; }
     // reset grid before spawning
     this.resetGrid();
     this.enemies = [];
-    const innerCount = Math.min(8, 2 + Math.floor(this.level/1));
-    // spawn inner enemies in random empty cells - ensure one 'main' enemy per level
-    for(let i=0;i<innerCount;i++){
-      let tries = 0; let ex = 0, ey = 0;
-      while(tries++ < 50){
-        const r = 1 + Math.floor(Math.random() * (ROWS-2));
-        const c = 1 + Math.floor(Math.random() * (COLS-2));
-        const cc = this.board.getCell(r,c);
-        if(cc && cc.isEmpty()){ const w = this.worldForCell(r,c); ex = w.x; ey = w.y; break; }
+    // Spawn enemies depending on JSON config (deterministic) or fallback to random
+    this.enemies = [];
+    const cfg = this.currentLevel || {};
+    // set per-level art if provided
+    try{ Draw.setLevelImages({ main: cfg?.enemyImages?.main, minion: cfg?.enemyImages?.minion, obstacle: cfg?.obstacleImage, projectile: cfg?.enemyImages?.projectile, powerup: cfg?.enemyImages?.powerup }); }catch(e){}
+
+    if(cfg.main && Array.isArray(cfg.minions) && cfg.minions.length){
+      // create main at configured coords if provided
+      let ex = cfg.main.x || (200 + Math.random()*400);
+      let ey = cfg.main.y || (200 + Math.random()*400);
+      const mainEnemy = new Enemy(ex, ey, 'main', cfg?.enemyConfig?.main || {}); mainEnemy.vx *= 1 + this.level*0.08; mainEnemy.vy *= 1 + this.level*0.08;
+      mainEnemy.hp = cfg.main.hp || mainEnemy.hp; mainEnemy.color = cfg.main.color || mainEnemy.color;
+      this.enemies.push(mainEnemy);
+      // add configured minions
+      for(const m of cfg.minions){ const mx = m.x || (200 + Math.random()*400); const my = m.y || (200 + Math.random()*400); const me = new Enemy(mx, my, 'minion', cfg?.enemyConfig?.minion || {}); me.vx *= 1 + this.level*0.08; me.vy *= 1 + this.level*0.08; this.enemies.push(me); }
+    } else {
+      // legacy behavior: randomly place up to 'innerCount' with one main
+      const innerCount = Math.min(8, 2 + Math.floor(this.level/1));
+      for(let i=0;i<innerCount;i++){
+        let tries = 0; let ex = 0, ey = 0;
+        while(tries++ < 50){
+          const r = 1 + Math.floor(Math.random() * (ROWS-2));
+          const c = 1 + Math.floor(Math.random() * (COLS-2));
+          const cc = this.board.getCell(r,c);
+          if(cc && cc.isEmpty()){ const w = this.worldForCell(r,c); ex = w.x; ey = w.y; break; }
+        }
+        if(ex === 0 && ey === 0){ ex = 200 + Math.random()*400; ey = 200 + Math.random()*400; }
+        const type = i === 0 ? 'main' : 'minion';
+        const e = new Enemy(ex, ey, type, (type === 'main' ? (this.currentLevel?.enemyConfig?.main || {}) : (this.currentLevel?.enemyConfig?.minion || {})));
+        e.vx *= 1 + this.level*0.08; e.vy *= 1 + this.level*0.08;
+        this.enemies.push(e);
       }
-      if(ex === 0 && ey === 0){ ex = 200 + Math.random()*400; ey = 200 + Math.random()*400; }
-      const type = i === 0 ? 'main' : 'minion';
-      const e = new Enemy(ex, ey, type);
-      e.vx *= 1 + this.level*0.08; e.vy *= 1 + this.level*0.08;
-      this.enemies.push(e);
     }
+    // add minibosses if defined in JSON
+    if(Array.isArray(cfg.minibosses) && cfg.minibosses.length){
+      for(const b of cfg.minibosses){ const bx = b.x || (200 + Math.random()*400); const by = b.y || (200 + Math.random()*400); const bc = Object.assign({}, cfg.enemyConfig?.main || {}, b.config || {}); bc.isMiniBoss = true; const be = new Enemy(bx, by, 'miniboss', bc); be.vx *= 1 + this.level*0.08; be.vy *= 1 + this.level*0.08; this.enemies.push(be); }
+    }
+
+    // schedule delayed spawns if present (array of {x,y,delay,type,config})
+    if(Array.isArray(cfg.delayedSpawns) && cfg.delayedSpawns.length){
+      for(const d of cfg.delayedSpawns){
+        const spawnType = d.type || 'minion';
+        const cfgFor = Object.assign({}, spawnType === 'main' ? (cfg.enemyConfig?.main || {}) : (cfg.enemyConfig?.minion || {}), d.config || {});
+        // account for this future enemy in the level total
+        this.levelEnemyTotal = (this.levelEnemyTotal || this.enemies.length) + 1;
+        setTimeout(()=>{
+          const sx = d.x || (200 + Math.random()*400); const sy = d.y || (200 + Math.random()*400);
+          const ne = new Enemy(sx, sy, spawnType === 'miniboss' ? 'miniboss' : spawnType, cfgFor);
+          ne.vx *= 1 + this.level*0.08; ne.vy *= 1 + this.level*0.08;
+          this.enemies.push(ne);
+          setEnemies(this.enemies.length, this.levelEnemyTotal);
+        }, Math.max(0, (d.delay || 1)) * 1000);
+      }
+    }
+
     // record the number of enemies at start-of-level
     this.levelEnemyTotal = this.enemies.length;
     setEnemies(this.enemies.length, this.levelEnemyTotal);
     // if we have a main enemy, ensure hp/color from level
-    for(const e of this.enemies){ if(e.type === 'main' && this.currentLevel && this.currentLevel.main){ e.hp = this.currentLevel.main.hp || e.hp; e.color = this.currentLevel.main.color || e.color; } }
+    for(const e of this.enemies){ if((e.type === 'main' || e.type === 'miniboss') && this.currentLevel && this.currentLevel.main){ e.hp = (e.isMiniBoss ? (e.hp) : (this.currentLevel.main.hp || e.hp)) || e.hp; e.color = e.config?.color || e.color; } }
     // add obstacles for this level (mark grid cells with 2)
     this.powerups = [];
     this.projectiles = [];
-    // Place rectangular obstacles with minimum size 4x4 to avoid single-cell obstacles
-    const obstacleCount = Math.min(60, Math.floor(this.level * 1.5) + (this.currentLevel ? this.currentLevel.obstacles : 0));
-    const obstacleSize = 4; // fixed blocks exactly 4x4
-    let placed = 0, tries = 0;
-    // Try to place 'obstacleCount' obstacle blocks (each block >= minObstacleSize x minObstacleSize)
-    while(placed < obstacleCount && tries++ < 5000){
-      // pick a random width/height for the block
-      const w = obstacleSize;
-      const h = obstacleSize;
-      // pick top-left anchor ensuring the block stays inside interior cells
-      const r = 1 + Math.floor(Math.random() * Math.max(1, (ROWS - 2) - h + 1));
-      const c = 1 + Math.floor(Math.random() * Math.max(1, (COLS - 2) - w + 1));
-
-      // validate all cells in candidate block are empty and not occupied by an enemy/player
-      let ok = true;
-      for(let rr = r; rr < r + h && ok; rr++){
-        for(let cc = c; cc < c + w; cc++){
-          const oc = this.board.getCell(rr, cc);
-          if(!oc || !oc.isEmpty()){ ok = false; break; }
-          // avoid placing obstacles on top of an enemy or player
-          for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec && ec.r === rr && ec.c === cc){ ok = false; break; } }
-          const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
-          if(pcell && pcell.r === rr && pcell.c === cc) { ok = false; break; }
+    // If JSON defines explicit obstacle rectangles, use those deterministically
+    if(Array.isArray(cfg.obstacles) && cfg.obstacles.length){
+      for(const obs of cfg.obstacles){
+        const r0 = Math.max(1, obs.r || 1); const c0 = Math.max(1, obs.c || 1);
+        const w = Math.max(1, obs.w || 4); const h = Math.max(1, obs.h || 4);
+        for(let rr = r0; rr < r0 + h && rr < ROWS-1; rr++){
+          for(let cc = c0; cc < c0 + w && cc < COLS-1; cc++){
+            // avoid overwriting enemies or player spawn; only set cells that are empty
+            const oc = this.board.getCell(rr, cc);
+            if(oc && oc.isEmpty()) this.board.setCell(rr, cc, 2);
+          }
         }
       }
-      if(!ok) continue;
-
-      // commit block
-      for(let rr = r; rr < r + h; rr++){
-        for(let cc = c; cc < c + w; cc++){
-          this.board.setCell(rr, cc, 2);
+    } else {
+      // fallback: random placement like previously
+      const obstacleCount = Math.min(60, Math.floor(this.level * 1.5) + (cfg.obstacles || 0));
+      const obstacleSize = 4; // fixed blocks exactly 4x4
+      let placed = 0, tries = 0;
+      while(placed < obstacleCount && tries++ < 5000){
+        const w = obstacleSize; const h = obstacleSize;
+        const r = 1 + Math.floor(Math.random() * Math.max(1, (ROWS - 2) - h + 1));
+        const c = 1 + Math.floor(Math.random() * Math.max(1, (COLS - 2) - w + 1));
+        let ok = true;
+        for(let rr = r; rr < r + h && ok; rr++){
+          for(let cc = c; cc < c + w; cc++){
+            const oc = this.board.getCell(rr, cc);
+            if(!oc || !oc.isEmpty()){ ok = false; break; }
+            for(const e of this.enemies){ const ec = this.cellFor(e.x,e.y); if(ec && ec.r === rr && ec.c === cc){ ok = false; break; } }
+            const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
+            if(pcell && pcell.r === rr && pcell.c === cc) { ok = false; break; }
+          }
         }
+        if(!ok) continue;
+        for(let rr = r; rr < r + h; rr++){
+          for(let cc = c; cc < c + w; cc++){
+            this.board.setCell(rr, cc, 2);
+          }
+        }
+        placed++;
       }
-      placed++;
     }
     // spawn a few powerups (grey boxes) in empty cells
-    const puCount = (this.currentLevel?.powerups ?? 1) + Math.floor(this.level / 5);
-    tries = 0; placed = 0;
+    const puCount = (cfg?.powerups ?? 1) + Math.floor(this.level / 5);
+    let tries = 0; let placed = 0;
     const types = ['speed','weapon','life','shield'];
     while(placed < puCount && tries++ < 500){
       const r = 1 + Math.floor(Math.random() * (ROWS-2));

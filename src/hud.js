@@ -1,16 +1,21 @@
-export function setPercent(val){ const el = document.getElementById('percent'); if(!el) return; const v = Number(val); el.textContent = `Captured: ${v.toFixed(2)}%`; }
-export function setScore(val){ const el = document.getElementById('score'); if(el) el.textContent = `Score: ${val}`; }
-export function setLives(val){ const el = document.getElementById('lives'); if(el) el.textContent = `Lives: ${val}`; }
-export function setLevel(val){ const el = document.getElementById('level'); if(el) el.textContent = `Level: ${val}`; }
-export function setMultiplier(val){ const el = document.getElementById('mult'); if(el) el.textContent = `Multiplier: x${val}`; }
+function _renderDigits(container, text, options){ if(!container) return; container.innerHTML = ''; const opt = Object.assign({path:'assets/external/SpaceShooterRedux/PNG/UI', w:12, h:18}, options||{}); const s = String(text); for(const ch of s){ if(/[0-9]/.test(ch)){ const img = document.createElement('img'); img.src = `${opt.path}/numeral${ch}.png`; img.width = opt.w; img.height = opt.h; img.style.imageRendering = 'pixelated'; container.appendChild(img); } else { const span = document.createElement('span'); span.textContent = ch; span.style.marginLeft = '2px'; span.style.marginRight = '2px'; span.style.color = '#ffd27f'; container.appendChild(span); } } }
+
+export function setPercent(val){ const el = document.getElementById('percent'); if(!el) return; const v = Math.round(Number(val) || 0); el.innerHTML = ''; const digits = document.createElement('div'); digits.style.display = 'flex'; digits.style.alignItems = 'center'; _renderDigits(digits, String(v).padStart(3,' '), {w:18,h:22}); const pct = document.createElement('div'); pct.textContent = '%'; pct.style.marginLeft = '6px'; pct.style.color = '#7efcff'; pct.style.fontWeight='700'; pct.style.textShadow='0 0 6px rgba(0,240,255,0.2)'; el.appendChild(digits); el.appendChild(pct); }
+
+export function setScore(val){ const el = document.getElementById('score'); if(!el) return; const s = Math.max(0, Math.floor(Number(val) || 0)); const digitsContainer = el.querySelector('.digits') || el; _renderDigits(digitsContainer, String(s).padStart(6,'0'), {w:12,h:18}); }
+
+export function setLives(val){ const el = document.getElementById('lives'); if(!el) return; el.innerHTML = ''; const count = Math.max(0, Number(val) || 0); for(let i=0;i<count;i++){ const img = document.createElement('img'); img.src = 'assets/external/SpaceShooterRedux/PNG/UI/playerLife1_blue.png'; img.alt = 'life'; el.appendChild(img); } if(count > 5){ const span = document.createElement('span'); span.style.marginLeft = '6px'; span.textContent = `x${count}`; el.appendChild(span); } }
+
+export function setLevel(val){ const el = document.getElementById('level'); if(!el) return; const n = Number(val) || 0; el.textContent = `LVL: ${String(n).padStart(2,'0')}`; }
+export function setMultiplier(val){ const el = document.getElementById('mult'); if(!el) return; el.textContent = `MULT: x${val}`; }
 export function setStatus(text){ const el = document.getElementById('status'); if(el) el.textContent = `Status: ${text}`; }
-export function setHighScore(val, flash=false){ const el = document.getElementById('highscore'); if(!el) return; el.textContent = `High: ${val}`; if(flash){ el.style.color = '#ff0'; setTimeout(()=>{ el.style.color = ''; }, 1200); } }
+export function setHighScore(val, flash=false){ const el = document.getElementById('highscore'); if(!el) return; const s = Math.max(0, Math.floor(Number(val) || 0)); const digitsContainer = el.querySelector('.digits') || el; _renderDigits(digitsContainer, String(s).padStart(6,'0'), {w:12,h:18}); if(flash){ el.style.color = '#ff0'; setTimeout(()=>{ el.style.color = ''; }, 1200); } }
 export function setSuperText(text){ const el = document.getElementById('super'); if(el) el.textContent = text || ''; }
-export function setEnemies(current, total){ const el = document.getElementById('enemies'); if(!el) return; el.textContent = `Enemies ${current} of ${total}`; }
-export function setPowerup(type, ttl){ const el = document.getElementById('powerup'); if(!el) return; el.textContent = type ? `Powerup: ${type}${ttl?(' ('+ttl.toFixed(1)+'s)'):''}` : ''; }
-export function setAmmo(ammo){ const el = document.getElementById('ammo'); if(!el) return; el.textContent = `Ammo: ${ammo}`; }
-export function setBossHP(hp, max){ const el = document.getElementById('bosshp'); if(!el) return; if(hp === null) el.textContent = ''; else el.textContent = `Boss HP: ${hp}/${max}`; }
-export function setLevelName(name){ const el = document.getElementById('levelname'); if(!el) return; el.textContent = name ? `Stage: ${name}` : ''; }
+export function setEnemies(current, total){ const el = document.getElementById('enemies'); if(!el) return; el.textContent = `ENEMIES: ${current}/${total}`; }
+export function setPowerup(type, ttl){ const el = document.getElementById('powerup'); if(!el) return; el.textContent = type ? `POWERUP: ${type}${ttl?(' ('+ttl.toFixed(1)+'s)'):''}` : ''; }
+export function setAmmo(ammo){ const el = document.getElementById('ammo'); if(!el) return; el.textContent = `AMMO: ${ammo}`; }
+export function setBossHP(hp, max){ const el = document.getElementById('bosshp'); if(!el) return; if(hp === null) el.textContent = ''; else el.textContent = `BOSS HP: ${hp}/${max}`; }
+export function setLevelName(name){ const el = document.getElementById('levelname'); if(!el) return; el.textContent = name ? `${String(name).toUpperCase()}` : ''; }
 
 // Display detected cave/area overlays. `caves` is an array of cave objects
 // returned from Board.detectCaves. Each cave should include `id` and `color`.

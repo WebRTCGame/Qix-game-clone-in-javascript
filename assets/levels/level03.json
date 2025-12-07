@@ -1,0 +1,29 @@
+{
+  "name": "Sunforge",
+  "visualDescription": "Big hand / claw visual",
+  "bg": "#201006",
+  "fill": "#ffb347",
+  "bgUncaptured": "assets/backgrounds/level03/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level03/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level03-main.png", "minion": "assets/sprites/enemies/minion/level03-minion.png", "projectile": "assets/sprites/projectiles/level03-proj.png", "powerup": "assets/sprites/powerups/level03-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level03-obstacle.png",
+  "main": { "hp": 6, "color": "#ff3b3b", "x": 360, "y": 220, "pattern": "radial" },
+  "minions": [
+    { "x": 160, "y": 160, "pattern": "follow" },
+    { "x": 640, "y": 160 },
+    { "x": 160, "y": 640 },
+    { "x": 640, "y": 640 },
+    { "x": 400, "y": 400 }
+  ],
+  "obstacles": [
+    { "r": 20, "c": 10, "w": 6, "h": 6 },
+    { "r": 36, "c": 20, "w": 8, "h": 6 },
+    { "r": 48, "c": 44, "w": 6, "h": 6 }
+  ],
+  "powerups": 1
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 40, "maxSpeed": 85, "acceleration": 7, "minSize": 7, "maxSize": 13 },
+    "minion": { "minSpeed": 50, "maxSpeed": 120, "acceleration": 9, "minSize": 3, "maxSize": 6 }
+  }
+}

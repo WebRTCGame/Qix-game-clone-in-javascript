@@ -112,6 +112,7 @@ const Draw = {
     }
   },
   player(ctx, player){
+    if(!player) return; // defensive: no player yet (async level load)
     const img = _images.player;
     const pW = (player.radius + 2) * 2;
     if(img && img.complete){
@@ -251,5 +252,14 @@ const Draw = {
     }
     ctx.restore();
   }
+}
+// Allow caller to override per-level images dynamically
+Draw.setLevelImages = function(images = {}){
+  if(!images) return;
+  if(images.main) { const img = new Image(); img.src = images.main; _images.enemy_main = img; }
+  if(images.minion) { const img = new Image(); img.src = images.minion; _images.enemy_minion = img; }
+  if(images.obstacle) { const img = new Image(); img.src = images.obstacle; _images.obstacle = img; }
+  if(images.projectile) { const img = new Image(); img.src = images.projectile; _images.projectile = img; }
+  if(images.powerup) { const img = new Image(); img.src = images.powerup; _images.powerup = img; }
 }
 export default Draw;

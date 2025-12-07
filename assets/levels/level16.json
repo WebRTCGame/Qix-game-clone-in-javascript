@@ -1,0 +1,37 @@
+{
+  "name": "Core Nexus Final",
+  "visualDescription": "Final core - fractured shards and high-intensity enemies",
+  "bg": "#000000",
+  "fill": "#ffd86b",
+  "bgUncaptured": "assets/backgrounds/level16/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level16/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level16-main.png", "minion": "assets/sprites/enemies/minion/level16-minion.png", "projectile": "assets/sprites/projectiles/level16-proj.png", "powerup": "assets/sprites/powerups/level16-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level16-obstacle.png",
+  "main": { "hp": 16, "color": "#ff0000", "x": 400, "y": 200, "pattern": "enraged" },
+  "minions": [
+    { "x": 120, "y": 120 },
+    { "x": 680, "y": 120 },
+    { "x": 120, "y": 680 },
+    { "x": 680, "y": 680 },
+    { "x": 240, "y": 240 },
+    { "x": 560, "y": 560 },
+    { "x": 400, "y": 320 },
+    { "x": 320, "y": 480 },
+    { "x": 480, "y": 480 },
+    { "x": 200, "y": 200 },
+    { "x": 600, "y": 600 }
+  ],
+  "minibosses": [
+    { "x": 400, "y": 120, "config": { "hp": 6, "pattern": "aggro" } }
+  ],
+  "obstacles": [
+    { "r": 8, "c": 8, "w": 14, "h": 8 },
+    { "r": 28, "c": 28, "w": 12, "h": 10 }
+  ],
+  "powerups": 4,
+  "enemyConfig": {
+    "main": { "minSpeed": 90, "maxSpeed": 180, "acceleration": 14, "minSize": 12, "maxSize": 24, "hp": 16 },
+    "minion": { "minSpeed": 90, "maxSpeed": 200, "acceleration": 16, "minSize": 6, "maxSize": 12 }
+  },
+  "completionBonus": { "type": "mega", "value": 25000, "note": "final stage big reward" }
+}

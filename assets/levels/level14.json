@@ -1,0 +1,30 @@
+{
+  "name": "The Grasp",
+  "visualDescription": "Telescoping limbs reach through tight gaps",
+  "bg": "#07020a",
+  "fill": "#ffa07a",
+  "bgUncaptured": "assets/backgrounds/level14/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level14/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level14-main.png", "minion": "assets/sprites/enemies/minion/level14-minion.png", "projectile": "assets/sprites/projectiles/level14-proj.png", "powerup": "assets/sprites/powerups/level14-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level14-obstacle.png",
+  "main": { "hp": 12, "color": "#ff3366", "x": 400, "y": 200, "pattern": "grabber" },
+  "minions": [
+    { "x": 120, "y": 240 },
+    { "x": 680, "y": 240 },
+    { "x": 240, "y": 560 },
+    { "x": 560, "y": 560 },
+    { "x": 360, "y": 420 },
+    { "x": 440, "y": 320 },
+    { "x": 520, "y": 420 }
+  ],
+  "obstacles": [
+    { "r": 10, "c": 20, "w": 12, "h": 6 },
+    { "r": 34, "c": 36, "w": 6, "h": 8 }
+  ],
+  "powerups": 3,
+  "completionBonus": { "type": "vulnerable_point", "value": 5000, "note": "bonus for hitting exposed weak points" },
+  "enemyConfig": {
+    "main": { "minSpeed": 75, "maxSpeed": 135, "acceleration": 11, "minSize": 12, "maxSize": 18, "hp": 12 },
+    "minion": { "minSpeed": 85, "maxSpeed": 180, "acceleration": 15, "minSize": 6, "maxSize": 10 }
+  }
+}

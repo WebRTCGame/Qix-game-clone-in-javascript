@@ -1,0 +1,28 @@
+{
+  "name": "Hive",
+  "visualDescription": "A pulsing insect hive with swarming corridors",
+  "bg": "#1b0a12",
+  "fill": "#ffb86b",
+  "bgUncaptured": "assets/backgrounds/level13/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level13/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level13-main.png", "minion": "assets/sprites/enemies/minion/level13-minion.png", "projectile": "assets/sprites/projectiles/level13-proj.png", "powerup": "assets/sprites/powerups/level13-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level13-obstacle.png",
+  "main": { "hp": 11, "color": "#ff44cc", "x": 420, "y": 200, "pattern": "swarm" },
+  "minions": [
+    { "x": 140, "y": 160 },
+    { "x": 660, "y": 160 },
+    { "x": 140, "y": 640 },
+    { "x": 660, "y": 640 },
+    { "x": 360, "y": 420 },
+    { "x": 440, "y": 520 }
+  ],
+  "obstacles": [
+    { "r": 20, "c": 12, "w": 6, "h": 6 },
+    { "r": 36, "c": 36, "w": 8, "h": 6 }
+  ],
+  "powerups": 3,
+  "enemyConfig": {
+    "main": { "minSpeed": 75, "maxSpeed": 125, "acceleration": 10, "minSize": 10, "maxSize": 18, "hp": 11 },
+    "minion": { "minSpeed": 80, "maxSpeed": 170, "acceleration": 14, "minSize": 5, "maxSize": 9 }
+  }
+}

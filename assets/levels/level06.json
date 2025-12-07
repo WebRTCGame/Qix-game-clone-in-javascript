@@ -1,0 +1,30 @@
+{
+  "name": "Crimson Barrens",
+  "visualDescription": "Centipede-like / segmented enemy",
+  "bg": "#1a0707",
+  "fill": "#ff6b6b",
+  "bgUncaptured": "assets/backgrounds/level06/uncaptured.png",
+  "bgCaptured": "assets/backgrounds/level06/captured.png",
+  "enemyImages": { "main": "assets/sprites/enemies/main/level06-main.png", "minion": "assets/sprites/enemies/minion/level06-minion.png", "projectile": "assets/sprites/projectiles/level06-proj.png", "powerup": "assets/sprites/powerups/level06-powerup.png" },
+  "obstacleImage": "assets/sprites/obstacles/level06-obstacle.png",
+  "main": { "hp": 8, "color": "#ff6699", "x": 380, "y": 220, "pattern": "segmented" },
+  "minions": [
+    { "x": 160, "y": 120 },
+    { "x": 640, "y": 120 },
+    { "x": 160, "y": 640 },
+    { "x": 640, "y": 640 },
+    { "x": 280, "y": 420 },
+    { "x": 520, "y": 420 }
+  ],
+  "obstacles": [
+    { "r": 10, "c": 20, "w": 10, "h": 6 },
+    { "r": 32, "c": 40, "w": 8, "h": 8 },
+    { "r": 54, "c": 12, "w": 8, "h": 4 }
+  ],
+  "powerups": 2
+  ,
+  "enemyConfig": {
+    "main": { "minSpeed": 55, "maxSpeed": 100, "acceleration": 9, "minSize": 8, "maxSize": 15 },
+    "minion": { "minSpeed": 65, "maxSpeed": 150, "acceleration": 11, "minSize": 4, "maxSize": 8 }
+  }
+}

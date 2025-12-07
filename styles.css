@@ -2,7 +2,44 @@
 body,html,#game-root{height:100%;width:100%;display:flex;align-items:center;justify-content:center;background:#111}
 #game-root{position:relative}
 canvas{background:#000;border:6px solid #222;image-rendering:pixelated}
-#hud{position:absolute;left:10px;top:10px;color:#fff;background:rgba(0,0,0,0.4);padding:6px 10px;border-radius:6px}
-#hud > div{margin-bottom:4px}
-#hud > div:last-child{margin-bottom:0}
-#hud #controls{font-size:11px;color:#ccc;margin-top:6px}
+/* HUD styled to evoke Ultimate Qix / retro arcade look */
+#hud{position:absolute;left:10px;top:8px;color:#cceaff;background:#0a0a0a;padding:6px 10px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.6);border:2px solid rgba(255,210,80,0.12);font-family:'Press Start 2P',monospace;font-size:12px;width:calc(800px - 20px)}
+
+/* layout: top HUD bar with three sections */
+#hud{display:flex;flex-direction:row;justify-content:space-between;align-items:flex-start;gap:12px}
+#hud-title{grid-column:1/3;font-size:18px;color:#49f6ff;letter-spacing:2px;text-shadow:0 0 6px rgba(73,246,255,0.6);display:flex;align-items:center;gap:8px}
+#hud-title::before{content:'';width:16px;height:16px;background:url('assets/external/SpaceShooterRedux/preview.png') center/cover no-repeat;filter:grayscale(1) contrast(0.6);opacity:0.9;border-radius:2px}
+#hud > div{margin:0;padding:2px}
+
+/* main emphasis styles */
+#percent{font-size:18px;color:#7efcff;text-shadow:0 0 8px rgba(0,240,255,0.28);font-weight:700}
+#levelname{font-size:11px;color:#cfeaff;margin-top:4px}
+
+/* score block */
+#score,#highscore{color:#ffd27f;display:flex;flex-direction:column;align-items:center;gap:4px}
+.score-block .label{font-size:10px;color:#ffd27f;opacity:0.95}
+.score-block .digits{display:flex;align-items:center;gap:2px}
+.score-block .digits img{width:12px;height:18px;image-rendering:pixelated}
+
+#percent img{width:18px;height:22px;image-rendering:pixelated}
+
+/* lives icons: we'll insert image tags */
+#lives img{width:20px;height:10px;image-rendering:pixelated;margin-right:6px;vertical-align:middle}
+
+#bosshp{color:#ff7f7f;margin-top:4px}
+#super{color:#ffdd66;margin-top:4px}
+
+#status{color:#bfefff;font-size:11px;margin-top:4px}
+#controls{font-size:9px;color:#99aabb;margin-top:6px;grid-column:1/3}
+
+/* layout for left/center/right */
+.hud-left{display:flex;flex-direction:column;align-items:flex-start;width:200px}
+.hud-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:280px;padding:0 14px;border-left:2px solid rgba(255,210,80,0.08);border-right:2px solid rgba(255,210,80,0.08)}
+.hud-right{display:flex;flex-direction:column;align-items:flex-end;width:200px}
+
+/* thin separators between sections */
+.hud-left, .hud-right{padding:0 8px}
+.hud-center .percent{font-size:22px;background:linear-gradient(180deg, rgba(16,50,58,0.4), rgba(6,20,26,0.5));padding:4px 6px;border-radius:4px;color:#7efcff;border:2px solid rgba(126,252,255,0.12);box-shadow:0 2px 6px rgba(0,200,255,0.06);font-weight:700}
+
+/* Bottom row */
+#hud-bottom{position:absolute;left:12px;right:12px;bottom:-40px;display:flex;gap:12px;align-items:center;justify-content:space-between}
