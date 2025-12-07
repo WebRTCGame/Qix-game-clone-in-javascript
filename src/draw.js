@@ -1,8 +1,10 @@
 // Preload sprite images (SVG pixel-art placeholders)
 const _images = {};
-['player','enemy_main','enemy_minion','powerup','projectile','obstacle'].forEach(name => {
+['player','enemy_main','enemy_minion','powerup','projectile'].forEach(name => {
   const img = new Image(); img.src = `assets/${name}.svg`; img.alt = name; _images[name] = img;
 });
+// obstacle sprite - prefer a raster PNG if available (we download assets/obstacle.png)
+{ const img = new Image(); img.src = `assets/obstacle.png`; img.alt = 'obstacle'; _images.obstacle = img; }
 
 const Draw = {
   clear(ctx, w, h, bg){
@@ -20,11 +22,34 @@ const Draw = {
           ctx.fillStyle = opts.fillColor || '#1e90ff'; // filled color (level art)
           ctx.fillRect(c*cell, r*cell, cell, cell);
           }
-        } else if(grid[r][c] === 2){
-          // draw obstacle sprite if available
-          const img = _images.obstacle;
-          if(img && img.complete){ ctx.drawImage(img, c*cell, r*cell, cell, cell); }
-          else { ctx.fillStyle = opts.obstacleColor || '#666'; ctx.fillRect(c*cell, r*cell, cell, cell); }
+        }
+        // skip obstacles here; we'll batch-draw them as grouped sprites afterwards
+      }
+    }
+    // find connected obstacle components and draw as a single sprite per group
+    const obsVisited = new Array(rows).fill(0).map(()=>new Array(cols).fill(false));
+    const obstacleImg = _images.obstacle;
+    for(let r0=0;r0<rows;r0++){
+      for(let c0=0;c0<cols;c0++){
+        if(obsVisited[r0][c0]) continue;
+        if(grid[r0][c0] !== 2) continue;
+        // flood-fill this obstacle block
+        const stack = [[r0,c0]]; obsVisited[r0][c0] = true; const cells = [];
+        while(stack.length){ const [rr,cc] = stack.pop(); cells.push({r:rr,c:cc}); const neigh=[[rr-1,cc],[rr+1,cc],[rr,cc-1],[rr,cc+1]]; for(const [nr,nc] of neigh){ if(nr>=0 && nr<rows && nc>=0 && nc<cols && !obsVisited[nr][nc] && grid[nr][nc]===2){ obsVisited[nr][nc] = true; stack.push([nr,nc]); } } }
+        // compute bbox
+        let rmin=Infinity, rmax=-Infinity, cmin=Infinity, cmax=-Infinity;
+        for(const cellObj of cells){ rmin = Math.min(rmin, cellObj.r); rmax = Math.max(rmax, cellObj.r); cmin = Math.min(cmin, cellObj.c); cmax = Math.max(cmax, cellObj.c); }
+        const x = cmin * cell; const y = rmin * cell; const w = (cmax - cmin + 1) * cell; const h = (rmax - rmin + 1) * cell;
+        if(obstacleImg && obstacleImg.complete){
+          try{
+            // draw group shadow then sprite
+            this.drawShadow(ctx, obstacleImg, x + w/2, y + h/2, w, h, 0);
+            ctx.drawImage(obstacleImg, x, y, w, h);
+          }catch(e){ /* draw fallback below */ }
+        } else {
+          // fallback: draw per-cell shadow ellipse then fill rectangles
+          for(const cc of cells){ ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(cc.c*cell + cell/2 + 20, cc.r*cell + cell/2 + 20, cell/2, cell/2, 0, 0, Math.PI*2); ctx.fill(); }
+          for(const cc of cells){ ctx.fillStyle = opts.obstacleColor || '#666'; ctx.fillRect(cc.c*cell, cc.r*cell, cell, cell); }
         }
       }
     }
@@ -91,8 +116,13 @@ const Draw = {
     const pW = (player.radius + 2) * 2;
     if(img && img.complete){
       const angle = (typeof player.angle === 'number') ? player.angle : 0;
+      // draw sprite visually larger (300%) without changing collision size
+      const scale = 3.0;
+      const drawW = pW * scale;
+      // draw shadow first (offset +40,+40)
+      this.drawShadow(ctx, img, player.x, player.y, drawW, drawW, angle);
       ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(angle + Math.PI/2);
-      ctx.drawImage(img, -pW/2, -pW/2, pW, pW);
+      ctx.drawImage(img, -drawW/2, -drawW/2, drawW, drawW);
       ctx.restore();
     } else { ctx.fillStyle = '#ff7f50'; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); }
     // sparks
@@ -116,6 +146,8 @@ const Draw = {
     if(img && img.complete){
       const w = (enemy.radius + (enemy.type==='main'?4:2)) * 2;
       const a = Math.atan2(enemy.vy || 0, enemy.vx || 1);
+      // enemy shadow
+      this.drawShadow(ctx, img, enemy.x, enemy.y, w, w, a);
       ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(a + Math.PI/2);
       ctx.drawImage(img, -w/2, -w/2, w, w);
       ctx.restore();
@@ -134,6 +166,35 @@ const Draw = {
         ctx.fillStyle = enemy.color || '#8b00ff';
         ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2); ctx.fill();
       }
+    }
+    ctx.restore();
+  },
+
+  // Draw a solid black, semi-transparent shadow for an image shaped like the sprite
+  // This draws the sprite at offset (x+40,y+40) with same rotation and tint.
+  drawShadow(ctx, img, x, y, w, h, angle){
+    ctx.save();
+    ctx.translate(x + 20, y + 20);
+    ctx.rotate(angle + Math.PI/2);
+    if(img && img.complete){
+      try{
+        // render onto an offscreen canvas so we don't alter main ctx compositing
+        const tmp = document.createElement('canvas'); tmp.width = Math.max(1, Math.floor(w)); tmp.height = Math.max(1, Math.floor(h));
+        const tctx = tmp.getContext('2d');
+        tctx.clearRect(0,0,tmp.width,tmp.height);
+        tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+        tctx.globalCompositeOperation = 'source-in';
+        tctx.fillStyle = 'rgba(0,0,0,0.5)';
+        tctx.fillRect(0,0,tmp.width,tmp.height);
+        ctx.drawImage(tmp, -w/2, -h/2, w, h);
+      }catch(e){
+        // fallback to simple oval if offscreen fails
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
+      }
+    } else {
+      // fallback: draw an oval shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath(); ctx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
   },

@@ -46,3 +46,10 @@ applyTo: '**'
  - Memory updated: 2025-12-06, added per-enemy area labels and improved label fallback: compute region map via floodFillRegions when region overlays aren't available and guard against undefined cell lookups so labels reliably render under enemies
  - Memory updated: 2025-12-06, obstacle placement changed: place rectangular obstacle blocks with minimum size 4x4 to avoid 1x1 obstacles and improve level variety
  - Memory updated: 2025-12-06, obstacle placement changed: all obstacles are exact 4x4 blocks; player movement now treats obstacles as true walls while capturing; fully-enclosed obstacle blocks are destroyed (converted to filled) when captured
+ - Memory updated: 2025-12-06, obstacle sprite added: downloaded assets/obstacle.png and Draw.grid now batches connected obstacle cells and draws a single scaled sprite per group
+ - Memory updated: 2025-12-06, visual tweak: player sprite is now drawn at 300% scale (visual only; physics/collision unchanged)
+ - Memory updated: 2025-12-06, visual tweak: player sprite is now drawn at 300% scale (visual only; physics/collision unchanged)
+ - Memory updated: 2025-12-06, visual polish: added black, 50%-alpha drop shadows for player and enemies; shadows use the sprite shape, same rotation, offset +40px X/Y
+ - Memory updated: 2025-12-06, fixed shadow compositor bug: drawShadow now uses an offscreen canvas to avoid altering main ctx compositing state which could cause rendering to go black
+ - Memory updated: 2025-12-06, adjusted drop shadow offset: shadows now offset +20px X/Y (previously +40px)
+ - Memory updated: 2025-12-06, obstacle shadows: added drop shadows for grouped obstacle sprites (drawn before obstacle sprite render)
