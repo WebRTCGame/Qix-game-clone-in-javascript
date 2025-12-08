@@ -6,7 +6,7 @@ import Sound from './sound.js';
 import Particles from './particles.js';
 import Board from './board.js';
 import { linesIntersect, pointToSegmentDistance } from './collision.js';
-import { setPercent, setScore, setLives, setLevel, setMultiplier, setStatus, setHighScore, setSuperText, setEnemies, setPowerup, setAmmo, setBossHP, setLevelName, setCaves } from './hud.js';
+import { setPercent, setScore, setLives, setRound, setTime, setMultiplier, setStatus, setHighScore, setSuperText, setEnemies, setPowerup, setAmmo, setBossHP, setLevelName, setCaves } from './hud.js';
 import Powerup from './powerup.js';
 import LEVELS from './levels.js';
 import { WIDTH, HEIGHT, CELL, COLS, ROWS, FPS, CAPTURE_PERCENT, LEVEL_COMPLETE_PERCENT, BOUNCE_DAMP, DESTROY_REGION_THRESHOLD, ENEMY_DESTROY_SCORE } from './constants.js';
@@ -22,19 +22,20 @@ export default class Game {
     this._floatingTexts = []; this.regionOverlays = [];
     this.caveOverlays = [];
     this.level = 0; this.multiplier = 1; this.score = 0; this.lives = 3;
+    this.levelTime = 0; // seconds elapsed for current level
     this.rafId = null; this.last = performance.now(); this.accumulator = 0; this.running = false; this.paused = false;
     this.captureSlow = false; this.fuse = { active: false, progress: 0, speed: 0.6, delay: 0.6, idleTimer: 0 };
     this._pHeld = false;
     this._enemySizeTimer = 0; // throttle periodic sizing updates
     this._enemySizeInterval = 0.25; // seconds
-  }
+  } // constructor
 
   init(){
     if(this.canvas){ this.canvas.width = WIDTH; this.canvas.height = HEIGHT; }
     // start fresh
     this.restart();
     return this;
-  }
+  } // init
 
   _frame(ts){
     const dt = (ts - this.last) / 1000;
@@ -44,7 +45,7 @@ export default class Game {
     while(this.accumulator >= step){ this.update(step); this.accumulator -= step; }
     this.draw();
     this.rafId = requestAnimationFrame(this._frame.bind(this));
-  }
+  } // _frame
 
   resetGrid(){ this.board.reset(); this.grid = this.board.grid; }
 
@@ -175,8 +176,14 @@ export default class Game {
         try{ this.updateEnemySizes(); }catch(e){ /* ignore */ }
       }catch(e){ this.caveOverlays = []; try{ setCaves([]); }catch(_){} }
     }catch(e){ this.specialOverlays = []; }
-  }
-    update(dt){
+  }// finalizeCapture
+  
+  
+  
+  update(dt){
+    // update level timer and display
+    this.levelTime += dt;
+    try{ setTime(this.levelTime); }catch(e){}
     this.handleInput(dt);
     this.player.update(dt, this);
     // update enemies - compute current regions so local perceived area can be used
@@ -247,63 +254,64 @@ export default class Game {
       if(p.isOutOfBounds() || (pc && !(this.board.getCell(pc.r,pc.c) && this.board.getCell(pc.r,pc.c).isEmpty()))){
         this.projectiles.splice(i,1); continue;
       }
-      // check collision with enemies
-      for(let j=this.enemies.length-1;j>=0;j--){
-        const e = this.enemies[j];
-        const d = Math.hypot(p.x - e.x, p.y - e.y);
-        if(d < e.radius + p.radius){
-          // hit
-          e.hp = (e.hp || 1) - 1;
-          this.projectiles.splice(i,1);
-          if(e.hp <= 0){
-            // remove enemy
-            const wasMain = e.type === 'main';
-            this.enemies.splice(j,1);
-            this.sound.play('pop');
-            this.particles.add(e.x,e.y,20);
-            // award score
-            this.score += (wasMain ? 5000 : 200) * this.multiplier;
-            setScore(this.score);
-            setEnemies(this.enemies.length, this.levelEnemyTotal);
-            if(wasMain){
-              // award optional level-specific completion bonus when main is destroyed
-              const bonus = Number(this.currentLevel?.completionBonus?.value || 0);
-              if(bonus > 0){
-                this.score += bonus * this.multiplier; // scale bonus by multiplier
-                setScore(this.score);
-                this._floatingTexts.push({ text: `+${bonus}`, x: e.x, y: e.y, size: 22, color: '#ffd700', life: 2.0 });
+      // check collision based on owner
+      if(p.owner === 'player'){
+        // player projectiles hit enemies
+        for(let j=this.enemies.length-1;j>=0;j--){
+          const e = this.enemies[j];
+          const d = Math.hypot(p.x - e.x, p.y - e.y);
+          if(d < e.radius + p.radius){
+            // hit
+            e.hp = (e.hp || 1) - 1;
+            this.projectiles.splice(i,1);
+            if(e.hp <= 0){
+              // remove enemy
+              const wasMain = e.type === 'main';
+              this.enemies.splice(j,1);
+              this.sound.play('pop');
+              this.particles.add(e.x,e.y,20);
+              // award score
+              this.score += (wasMain ? 5000 : 200) * this.multiplier;
+              setScore(this.score);
+              setEnemies(this.enemies.length, this.levelEnemyTotal);
+              if(wasMain){
+                // award optional level-specific completion bonus when main is destroyed
+                const bonus = Number(this.currentLevel?.completionBonus?.value || 0);
+                if(bonus > 0){
+                  this.score += bonus * this.multiplier; // scale bonus by multiplier
+                  setScore(this.score);
+                  this._floatingTexts.push({ text: `+${bonus}`, x: e.x, y: e.y, size: 22, color: '#ffd700', life: 2.0 });
+                }
+                setStatus('Main enemy destroyed! Level Cleared');
+                setBossHP(null);
+                setTimeout(()=>{ this.nextLevel(); }, 700);
+                return; // bail from update because level will reset
               }
-              setStatus('Main enemy destroyed! Level Cleared');
-              setBossHP(null);
-              setTimeout(()=>{ this.nextLevel(); }, 700);
-              return; // bail from update because level will reset
+              break;
+            } else {
+              // enemy damaged
+              this.sound.play('hit');
+              if(e.type === 'main') setBossHP(e.hp, (this.currentLevel?.main?.hp || e.hp));
+              break;
             }
-            break;
-          } else {
-            // enemy damaged
-            this.sound.play('hit');
-            if(e.type === 'main') setBossHP(e.hp, (this.currentLevel?.main?.hp || e.hp));
-            break;
           }
         }
-      }
-    }
-
-    // update powerups and handle pickup
-    for(let i=this.powerups.length-1;i>=0;i--){
-      const pu = this.powerups[i]; pu.update(dt);
-      if(pu.collidesWithPlayer(this.player)){
-        // apply effects
-        switch(pu.type){
-          case 'speed': this.player.speedMul = 1.6; this.player.speedTimer = 8.0; setStatus('Speed x1.6'); break;
-          case 'weapon': this.player.weaponAmmo += 8; setStatus('Weapon picked'); break;
-          case 'life': this.lives++; setLives(this.lives); setStatus('Extra Life'); break;
-          case 'shield': this.player.shieldTimer = 8.0; setStatus('Shield Active'); break;
+      } else if(p.owner === 'enemy'){
+        // enemy projectiles hit player
+        if(this.player && !this.player.capturing){
+          const d = Math.hypot(p.x - this.player.x, p.y - this.player.y);
+          if(d < this.player.radius + p.radius){
+            // hit player
+            if(this.player.shieldTimer <= 0){
+              this.player.kill();
+              this.sound.play('die');
+              this.handleDeath();
+            }
+            this.projectiles.splice(i,1);
+            continue;
+          }
         }
-        this.sound.play('powerup');
-        this.powerups.splice(i,1);
-      }
-    }
+      }}
 
     // floating texts update
     for(let i=this._floatingTexts.length-1;i>=0;i--){
@@ -331,7 +339,7 @@ export default class Game {
     const powerLabel = this.player.weaponAmmo>0 ? 'weapon' : (this.player.speedTimer>0 ? 'speed' : (this.player.shieldTimer>0 ? 'shield' : ''));
     setPowerup(powerLabel, this.player.weaponAmmo>0 ? null : (this.player.speedTimer>0 ? this.player.speedTimer : (this.player.shieldTimer>0 ? this.player.shieldTimer : null)));
     setAmmo(this.player.weaponAmmo);
-  }
+  } // update(dt)
 
   handleInput(dt){
     // toggle pause key
@@ -405,18 +413,18 @@ export default class Game {
     if(this.input.isKeyPressed('r')){
       this.restart();
     }
-      // shooting - space or z
-      const shootPressed = this.input.isKeyPressed(' ') || this.input.isKeyPressed('z') || this.input.isKeyPressed('Z');
-      if(shootPressed){
-        // allow shooting only when player is not capturing
-        if(this.player && !this.player.capturing){
-          const dir = this.input.getDirection();
-          let dx = dir.x, dy = dir.y;
-          if(dx === 0 && dy === 0) { dy = -1; } // default up
-          this.player.shoot(dx, dy, this);
-        }
+    // shooting - space or z
+    const shootPressed = this.input.isKeyPressed(' ') || this.input.isKeyPressed('z') || this.input.isKeyPressed('Z');
+    if(shootPressed){
+      // allow shooting only when player is not capturing
+      if(this.player && !this.player.capturing){
+        const dir = this.input.getDirection();
+        let dx = dir.x, dy = dir.y;
+        if(dx === 0 && dy === 0) { dy = -1; } // default up
+        this.player.shoot(dx, dy, this);
       }
-  }
+    }
+  } // handleInput(dt)
 
   
 
@@ -481,7 +489,7 @@ export default class Game {
     }
 
     // done
-  }
+  } // updateMultiplier()
 
   // Update enemy sizes based on which area/cave they occupy.
   // Prefer per-cell caveId when available; otherwise fall back to flood-fill regions.
@@ -518,7 +526,7 @@ export default class Game {
       for(let i=0;i<regions.length;i++){ for(const c of regions[i].cells) cellToRegion[c.r + ',' + c.c] = i; }
       for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number'){ const reg = regions[rid]; const ratio = totalEmpty > 0 ? (reg.cells.length / totalEmpty) : (reg.cells.length / (COLS * ROWS)); const target = Math.max(3, Math.floor(3 + ratio * 30)); enemy.targetRadius = target; } }
     } catch(e){ /* best-effort sizing; ignore failures */ }
-  }
+  } // updateEnemySizes()
 
   updatePercent(){
     // Compute percent captured relative to the fillable interior
@@ -550,7 +558,7 @@ export default class Game {
       // start next level
       setTimeout(()=>{ this.nextLevel(); }, 200);
     }
-  }
+  } // updatePercent()
 
   handleDeath(opts = {}){
     // opts.nearest -> respawn at nearest filled cell to where player died
@@ -584,7 +592,7 @@ export default class Game {
     this.player = new Player(spawn.x, spawn.y, CELL);
     // small pause before resuming
     this.last = performance.now(); this.accumulator = 0;
-  }
+  } // handleDeath()
 
   // Build a temporary grid with the trail cells set as filled and return the temp grid,
   // list of discrete trail cells and the wall segments (world coords) representing the trail.
@@ -640,7 +648,7 @@ export default class Game {
     }
     dilatedCount += nearWallCount;
     return { tempGrid, trailFilled, walls, dilatedCount };
-  }
+  } // _buildTempFromTrail()
 
   // Compute polygon interior cells from the player's trail (in world coordinates), grouping into connected components.
   // tempGrid is used to check for candidate empty cells (trail and other cells marked are treated accordingly).
@@ -692,7 +700,7 @@ export default class Game {
 
     console.log('computePolygonComponents: bbox=', {minR,minC,maxR,maxC}, 'candidates=', polyCellsSet.size, 'comps=', comps.length, 'debugInfo=', debugInfo);
     return comps;
-  }
+  } // _computePolygonComponents()
 
   // Build overlay metadata (cells + color) for a set of flood-fill regions
   _assignRegionOverlays(regions){
@@ -709,15 +717,15 @@ export default class Game {
       overlays.push({ cells, color, label: String(cells.length), cx, cy });
     }
     return overlays;
-  }
+  } // _assignRegionOverlays()
 
   cellFor(x, y){
     return this.board.cellFor(x,y);
-  }
+  } // cellFor()
 
   worldForCell(r,c){
     return this.board.worldForCell(r,c);
-  }
+  } // worldForCell()
 
   draw(){
     // draw per-level background images if present; fallback to solid bg color
@@ -779,7 +787,17 @@ export default class Game {
       }catch(_){ /* best-effort fallback - ignore errors */ }
     }
     for(const enemy of this.enemies){
-      Draw.enemy(this.ctx, enemy);
+      Draw.enemy(this.ctx, enemy, 'shadow');
+      // show area id under enemies: prefer per-cell caveId then region index
+      // area ids are drawn on sprites, so skip here
+    }
+    // powerups + projectiles shadows
+    for(const pu of this.powerups) Draw.powerup(this.ctx, pu, 'shadow');
+    for(const pr of this.projectiles) Draw.projectile(this.ctx, pr, 'shadow');
+    Draw.player(this.ctx, this.player, 'shadow');
+    // now draw sprites
+    for(const enemy of this.enemies){
+      Draw.enemy(this.ctx, enemy, 'sprite');
       // show area id under enemies: prefer per-cell caveId then region index
       const cell = this.cellFor(enemy.x, enemy.y);
       if(!cell) continue;
@@ -798,10 +816,10 @@ export default class Game {
         this.ctx.restore();
       }
     }
-    // powerups + projectiles
-    for(const pu of this.powerups) Draw.powerup(this.ctx, pu);
-    for(const pr of this.projectiles) Draw.projectile(this.ctx, pr);
-    Draw.player(this.ctx, this.player);
+    // powerups + projectiles sprites
+    for(const pu of this.powerups) Draw.powerup(this.ctx, pu, 'sprite');
+    for(const pr of this.projectiles) Draw.projectile(this.ctx, pr, 'sprite');
+    Draw.player(this.ctx, this.player, 'sprite');
     // floating texts drawn above player and other locations
     for(const t of this._floatingTexts){
       this.ctx.save();
@@ -815,13 +833,13 @@ export default class Game {
     // particles
     if(this.particles) this.particles.draw(this.ctx);
     // draw percent in HUD (done elsewhere)
-  }
+  } // draw()
 
   gameOver(){
     this.running = false;
     if(this.rafId) cancelAnimationFrame(this.rafId);
     setStatus('Game Over');
-  }
+  } // gameOver()
 
   restart(){
     // simple restart
@@ -840,7 +858,7 @@ export default class Game {
       }
       setStatus('Ready');
     }).catch(e => { console.error('Failed to load next level:', e); setStatus('Error loading level'); });
-  }
+  } // restart()
 
   async nextLevel(){
     // increment level and wrap to available levels (keep 1..count)
@@ -996,10 +1014,12 @@ export default class Game {
     // show boss HP if present
     const mainEnemy = this.enemies.find(e => e.type === 'main');
     if(mainEnemy){ setBossHP(mainEnemy.hp, mainEnemy.hp); } else { setBossHP(null); }
-    setLevel(this.level);
+    setRound(this.level);
+    try{ setTime(0); }catch(e){}
     setMultiplier(this.multiplier);
 
     // set initial sizes for enemies based on area they occupy (using per-cell metadata when possible)
     try{ this.updateEnemySizes(); }catch(e){ /* ignore sizing errors */ }
-  }
-}
+  } // nextLevel()
+} // class Game
+

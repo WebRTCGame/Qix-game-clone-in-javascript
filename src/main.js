@@ -1,4 +1,5 @@
-import Game from './game.js';
+// Cache-bust module imports during development to avoid stale browser caches
+import Game from './game.js?t=20251207-01';
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');

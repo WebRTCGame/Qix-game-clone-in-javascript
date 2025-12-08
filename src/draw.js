@@ -111,7 +111,7 @@ const Draw = {
       ctx.fillStyle = '#f33'; ctx.beginPath(); ctx.arc(fx, fy, 4, 0, Math.PI*2); ctx.fill();
     }
   },
-  player(ctx, player){
+  player(ctx, player, mode='both'){
     if(!player) return; // defensive: no player yet (async level load)
     const img = _images.player;
     const pW = (player.radius + 2) * 2;
@@ -120,52 +120,134 @@ const Draw = {
       // draw sprite visually larger (300%) without changing collision size
       const scale = 3.0;
       const drawW = pW * scale;
-      // draw shadow first (offset +40,+40)
-      this.drawShadow(ctx, img, player.x, player.y, drawW, drawW, angle);
-      ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(angle + Math.PI/2);
-      ctx.drawImage(img, -drawW/2, -drawW/2, drawW, drawW);
-      ctx.restore();
-    } else { ctx.fillStyle = '#ff7f50'; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); }
-    // sparks
-    for(const sp of player.sparks){
-      const imgP = _images.projectile;
-      const sw = (sp.radius || 3) * 2;
-      if(imgP && imgP.complete){ const a = (typeof sp.angle === 'number' ? sp.angle : Math.atan2(sp.vy || 0, sp.vx || 1)); ctx.save(); ctx.translate(sp.x, sp.y); ctx.rotate(a + Math.PI/2); ctx.drawImage(imgP, -sw/2, -sw/2, sw, sw); ctx.restore(); }
-      else { ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sp.x, sp.y, 3,0,Math.PI*2); ctx.fill(); }
+      if(mode === 'shadow' || mode === 'both'){
+        // draw shadow first (offset +40,+40)
+        this.drawShadow(ctx, img, player.x, player.y, drawW, drawW, angle);
+      }
+      if(mode === 'sprite' || mode === 'both'){
+        ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(angle + Math.PI/2);
+        ctx.drawImage(img, -drawW/2, -drawW/2, drawW, drawW);
+        ctx.restore();
+      }
+    } else {
+      if(mode === 'sprite' || mode === 'both'){
+        ctx.fillStyle = '#ff7f50'; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+      }
     }
-    // shield
-    if(player.shieldTimer > 0){
-      ctx.save(); ctx.strokeStyle = 'rgba(255,255,128,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius+4, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+    // sparks
+    if(mode === 'sprite' || mode === 'both'){
+      for(const sp of player.sparks){
+        const imgP = _images.projectile;
+        const sw = (sp.radius || 3) * 2;
+        if(imgP && imgP.complete){ const a = (typeof sp.angle === 'number' ? sp.angle : Math.atan2(sp.vy || 0, sp.vx || 1)); ctx.save(); ctx.translate(sp.x, sp.y); ctx.rotate(a + Math.PI/2); ctx.drawImage(imgP, -sw/2, -sw/2, sw, sw); ctx.restore(); }
+        else { ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sp.x, sp.y, 3,0,Math.PI*2); ctx.fill(); }
+      }
+      // shield
+      if(player.shieldTimer > 0){
+        ctx.save(); ctx.strokeStyle = 'rgba(255,255,128,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius+4, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+      }
     }
   },
-  powerup(ctx, p){ if(!p) return; const img = _images.powerup; if(img && img.complete) ctx.drawImage(img, p.x - p.size, p.y - p.size, p.size*2, p.size*2); else p.draw(ctx); },
-  projectile(ctx, proj){ if(!proj) return; const img = _images.projectile; const w = proj.radius * 2.6; if(img && img.complete){ const a = (typeof proj.angle === 'number') ? proj.angle : Math.atan2(proj.vy||0, proj.vx||1); ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(a + Math.PI/2); ctx.drawImage(img, -w/2, -w/2, w, w); ctx.restore(); } else proj.draw(ctx); },
-  enemy(ctx, enemy){
+  powerup(ctx, pu, mode='both'){
+    if(!pu) return;
+    const img = _images.powerup;
+    if(img && img.complete){
+      const w = pu.size * 2;
+      if(mode === 'shadow' || mode === 'both'){
+        this.drawShadow(ctx, img, pu.x, pu.y, w, w, 0);
+      }
+      if(mode === 'sprite' || mode === 'both'){
+        ctx.drawImage(img, pu.x - pu.size, pu.y - pu.size, w, w);
+      }
+    } else {
+      if(mode === 'sprite' || mode === 'both'){
+        pu.draw(ctx);
+      }
+    }
+  },
+  projectile(ctx, proj, mode='both'){
+    if(!proj) return;
+    const img = _images.projectile;
+    const w = proj.radius * 2.6;
+    const a = (typeof proj.angle === 'number') ? proj.angle : Math.atan2(proj.vy||0, proj.vx||1);
+    if(img && img.complete){
+      if(mode === 'shadow' || mode === 'both'){
+        this.drawShadow(ctx, img, proj.x, proj.y, w, w, a);
+      }
+      if(mode === 'sprite' || mode === 'both'){
+        ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(a + Math.PI/2);
+        ctx.drawImage(img, -w/2, -w/2, w, w);
+        ctx.restore();
+      }
+    } else {
+      if(mode === 'sprite' || mode === 'both'){
+        proj.draw(ctx);
+      }
+    }
+  },
+  enemy(ctx, enemy, mode='both'){
     ctx.save();
     const imgName = enemy.type === 'main' ? 'enemy_main' : 'enemy_minion';
     const img = _images[imgName];
     if(img && img.complete){
       const w = (enemy.radius + (enemy.type==='main'?4:2)) * 2;
       const a = Math.atan2(enemy.vy || 0, enemy.vx || 1);
-      // enemy shadow
-      this.drawShadow(ctx, img, enemy.x, enemy.y, w, w, a);
-      ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(a + Math.PI/2);
-      ctx.drawImage(img, -w/2, -w/2, w, w);
-      ctx.restore();
-      if(enemy.type === 'main'){
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
+      // draw segments shadows first (if mode includes shadow)
+      if(enemy.segments && enemy.segments.length > 0 && (mode === 'shadow' || mode === 'both')){
+        for(let i = enemy.segments.length - 1; i >= 0; i--){
+          const seg = enemy.segments[i];
+          const sw = w * 0.8;
+          const sa = seg.angle;
+          // segment shadow
+          this.drawShadow(ctx, img, seg.x, seg.y, sw, sw, sa);
+        }
+      }
+      // head shadow (if mode includes shadow)
+      if(mode === 'shadow' || mode === 'both'){
+        this.drawShadow(ctx, img, enemy.x, enemy.y, w, w, a);
+      }
+      // draw segments sprites (if mode includes sprite)
+      if(enemy.segments && enemy.segments.length > 0 && (mode === 'sprite' || mode === 'both')){
+        for(let i = enemy.segments.length - 1; i >= 0; i--){
+          const seg = enemy.segments[i];
+          const sw = w * 0.8;
+          const sa = seg.angle;
+          ctx.save(); ctx.translate(seg.x, seg.y); ctx.rotate(sa + Math.PI/2);
+          ctx.drawImage(img, -sw/2, -sw/2, sw, sw);
+          ctx.restore();
+        }
+      }
+      // head sprite (if mode includes sprite)
+      if(mode === 'sprite' || mode === 'both'){
+        ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(a + Math.PI/2);
+        ctx.drawImage(img, -w/2, -w/2, w, w);
+        ctx.restore();
+        if(enemy.type === 'main'){
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
+        }
       }
     } else {
-      if(enemy.type === 'main'){
-        ctx.fillStyle = enemy.color || '#ff4500';
-        ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+2, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+4, 0, Math.PI*2); ctx.stroke();
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
-      } else {
-        ctx.fillStyle = enemy.color || '#8b00ff';
-        ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2); ctx.fill();
+      // fallback: draw segments first
+      if(enemy.segments && enemy.segments.length > 0 && (mode === 'sprite' || mode === 'both')){
+        for(let i = enemy.segments.length - 1; i >= 0; i--){
+          const seg = enemy.segments[i];
+          ctx.fillStyle = enemy.color || '#ff4500';
+          ctx.beginPath(); ctx.arc(seg.x, seg.y, enemy.radius * 0.8, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      // head
+      if(mode === 'sprite' || mode === 'both'){
+        if(enemy.type === 'main'){
+          ctx.fillStyle = enemy.color || '#ff4500';
+          ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+2, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius+4, 0, Math.PI*2); ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
+        } else {
+          ctx.fillStyle = enemy.color || '#8b00ff';
+          ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2); ctx.fill();
+        }
       }
     }
     ctx.restore();

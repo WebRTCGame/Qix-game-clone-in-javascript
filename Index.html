@@ -16,33 +16,41 @@
 			<canvas id="game-canvas" width="800" height="800"></canvas>
 			<div id="hud">
 				<div class="hud-left">
-					<div id="level">LVL: 01</div>
-					<div id="levelname">STAGE: Neo City</div>
+					<div class="score-section">
+						<div id="score" class="score-block"><div class="label">SCORE</div><div class="digits"></div></div>
+						<div id="time" class="time-block"><div class="label">TIME</div><div class="digits"></div></div>
+					</div>
+					<div class="round-section">
+						<div id="round" class="round-block"><div class="label">ROUND</div><div id="round-num">01</div></div>
+						<div id="lives"></div>
+					</div>
 				</div>
 				<div class="hud-center">
-					<div id="score" class="score-block"><div class="label">SCORE</div><div class="digits"></div></div>
-					<div id="highscore" class="score-block"><div class="label">HI-SCORE</div><div class="digits"></div></div>
 					<div id="percent" class="percent">0%</div>
 				</div>
 				<div class="hud-right">
-					<div id="lives"></div>
-					<div id="enemies">ENEMIES: 0/0</div>
-					<div id="ammo">AMMO: 0</div>
-					<div id="mult">MULT: x1</div>
 				</div>
 				<div id="hud-bottom">
-					<div id="bosshp"></div>
 					<div id="powerup"></div>
 					<div id="super"></div>
-					<div id="status">READY</div>
 				</div>
+			</div>
+			<!-- arcade style frame / decorative elements (top and bottom HUD already present) -->
+			<!-- bottom footer — contains area list, status and controls below the canvas -->
+			<div id="hud-footer">
 				<div id="areas">
 					<div id="areas-count">Areas: 0</div>
 					<div id="areas-list" style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px"></div>
 				</div>
 				<div id="controls">Arrows/WASD: Move · Shift: Slow draw (double points) · R: Restart · P: Pause</div>
+				<div id="status">READY</div>
+				<div id="highscore" class="score-block"><div class="label">HI-SCORE</div><div class="digits"></div></div>
+				<div id="enemies">ENEMIES: 0/0</div>
+				<div id="ammo">AMMO: 0</div>
+				<div id="mult">MULT: x1</div>
+				<div id="bosshp"></div>
 			</div>
 		</div>
-		<script type="module" src="src/main.js"></script>
+		<script type="module" src="src/main.js?t=20251207-01"></script>
 	</body>
 </html>

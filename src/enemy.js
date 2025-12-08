@@ -1,4 +1,5 @@
 import Spark from './spark.js';
+import Projectile from './projectile.js';
 import { pointToSegmentDistance, circleRectPenetration, reflectVector } from './collision.js';
 import { CELL, ROWS, COLS, WIDTH, HEIGHT, BOUNCE_DAMP } from './constants.js';
 const TWO_PI = Math.PI*2;
@@ -10,6 +11,11 @@ export default class Enemy{
     this.type = type;
     // apply configuration if present
     this.config = cfg || {};
+    // set properties from config first
+    this.aggression = typeof this.config.aggression === 'number' ? this.config.aggression : 1.0; // multiplier for speed/accel
+    this.acceleration = typeof this.config.acceleration === 'number' ? this.config.acceleration : 0;
+    this.maxSpeed = typeof this.config.maxSpeed === 'number' ? this.config.maxSpeed : 120;
+    this.temperament = this.config.temperament || 'neutral'; // 'passive', 'aggressive', 'erratic'
     // base speed + size depend on type or provided config
     let baseSpeed = 70 * 0.75; // default
     if(typeof this.config.minSpeed === 'number' && typeof this.config.maxSpeed === 'number'){
@@ -23,6 +29,10 @@ export default class Enemy{
       baseSpeed *= 0.6; baseRadius = Math.max(baseRadius * 1.8, 6);
       this.color = this.config.color || '#ff4500';
       this.hp = typeof this.config.hp === 'number' ? this.config.hp : 3;
+      // apply aggression
+      baseSpeed *= this.aggression;
+      this.acceleration *= this.aggression;
+      this.maxSpeed *= this.aggression;
     } else {
       this.color = this.config.color || '#8b00ff';
       this.hp = typeof this.config.hp === 'number' ? this.config.hp : 1;
@@ -33,14 +43,22 @@ export default class Enemy{
     this.targetRadius = baseRadius; // desired radius (for smooth transitions)
     this._radiusLerpSpeed = 6.0; // how quickly radius approaches target (units per second)
     if(typeof this.config.radiusLerpSpeed === 'number') this._radiusLerpSpeed = this.config.radiusLerpSpeed;
-    // optional acceleration and maxSpeed from config
-    this.acceleration = typeof this.config.acceleration === 'number' ? this.config.acceleration : 0;
-    this.maxSpeed = typeof this.config.maxSpeed === 'number' ? this.config.maxSpeed : 120;
     this._lastSpark = 0;
     this._t = Math.random() * 1000;
     // optional behavior pattern (hover|orbit|patrol|aggro for mains; follow|swerve for minions)
     this.pattern = typeof this.config.pattern === 'string' ? this.config.pattern : null;
     this.isMiniBoss = !!this.config.isMiniBoss;
+    // weapon system for mains
+    this.weapon = this.config.weapon || null; // e.g., 'radial', 'axes', 'burst', etc.
+    this.fireRate = typeof this.config.fireRate === 'number' ? this.config.fireRate : 2.0; // shots per second
+    this.lastFire = 0;
+    // segments for centipede-like enemies
+    this.segments = [];
+    if(type === 'main' && typeof this.config.segments === 'number' && this.config.segments > 0){
+      this.segments = Array(this.config.segments).fill().map(() => ({x: this.x, y: this.y, angle: 0}));
+      this.segmentSpeed = typeof this.config.segmentSpeed === 'number' ? this.config.segmentSpeed : 150;
+      this.maxSegmentDist = typeof this.config.maxSegmentDist === 'number' ? this.config.maxSegmentDist : this.radius * 2;
+    }
   }
 
   update(dt, game){
@@ -78,6 +96,33 @@ export default class Enemy{
     this.x = Math.max(1, Math.min(799, this.x));
     this.y = Math.max(1, Math.min(799, this.y));
 
+    // update segments for centipede enemies
+    if(this.segments.length > 0){
+      for(let i = 0; i < this.segments.length; i++){
+        const target = i === 0 ? this : this.segments[i - 1];
+        const dx = target.x - this.segments[i].x;
+        const dy = target.y - this.segments[i].y;
+        const dist = Math.hypot(dx, dy);
+        // compute desired max distance dynamically so spacing scales with current enemy size
+        const maxSegDist = (typeof this.config.maxSegmentDist === 'number') ? this.config.maxSegmentDist : Math.max(6, this.radius * 2);
+        if(dist > maxSegDist){
+          const moveDist = Math.min(this.segmentSpeed * dt, dist - maxSegDist);
+          this.segments[i].x += (dx / dist) * moveDist;
+          this.segments[i].y += (dy / dist) * moveDist;
+        }
+      }
+      // update segment angles to propagate rotation
+      const headAngle = Math.atan2(this.vy, this.vx);
+      for(let i = 0; i < this.segments.length; i++){
+        const targetAngle = i === 0 ? headAngle : this.segments[i-1].angle;
+        let angleDiff = targetAngle - this.segments[i].angle;
+        // normalize to -pi to pi
+        while(angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while(angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        this.segments[i].angle += angleDiff * 0.05 * dt * 60; // lerp factor
+      }
+    }
+
     // behavior variations
     this._t += dt;
     if(this.type === 'main' || this.type === 'miniboss'){
@@ -102,6 +147,14 @@ export default class Enemy{
       const sp = Math.hypot(this.vx, this.vy) || 1;
       const maxSp = this.maxSpeed || 120;
       if(sp > maxSp){ this.vx = (this.vx/sp) * maxSp; this.vy = (this.vy/sp) * maxSp; }
+    }
+    // weapon firing for mains
+    if(this.weapon && this.type === 'main'){
+      const now = performance.now() / 1000;
+      if(now - this.lastFire > 1 / this.fireRate){
+        this.fireWeapon(game);
+        this.lastFire = now;
+      }
     } else {
       // minion pattern-based behavior
       if(this.pattern === 'follow' && game && game.player){
@@ -129,11 +182,15 @@ export default class Enemy{
   collideTrail(trail){
     // trail is an array of {x,y,r,c}. We'll check distance to segments for precision.
     // Return the closest point on the segment if within range.
+    const points = [{x: this.x, y: this.y}];
+    if(this.segments) points.push(...this.segments);
     let closest = null; let best = Infinity;
-    for(let i=0;i<trail.length-1;i++){
-      const a = trail[i]; const b = trail[i+1];
-      const d = pointToSegmentDistance(this.x, this.y, a.x, a.y, b.x, b.y);
-      if(d < best){ best = d; const t = Math.max(0, Math.min(1, ((this.x - a.x)*(b.x-a.x) + (this.y - a.y)*(b.y-a.y))/((b.x-a.x)*(b.x-a.x) + (b.y-a.y)*(b.y-a.y) || 1))); const px = a.x + (b.x-a.x)*t; const py = a.y + (b.y-a.y)*t; closest = {x:px,y:py}; }
+    for(const point of points){
+      for(let i=0;i<trail.length-1;i++){
+        const a = trail[i]; const b = trail[i+1];
+        const d = pointToSegmentDistance(point.x, point.y, a.x, a.y, b.x, b.y);
+        if(d < best){ best = d; const t = Math.max(0, Math.min(1, ((point.x - a.x)*(b.x-a.x) + (point.y - a.y)*(b.y-a.y))/((b.x-a.x)*(b.x-a.x) + (b.y-a.y)*(b.y-a.y) || 1))); const px = a.x + (b.x-a.x)*t; const py = a.y + (b.y-a.y)*t; closest = {x:px,y:py}; }
+      }
     }
     if(best <= this.radius + 2){
       const dx = this.x - closest.x; const dy = this.y - closest.y; const m = Math.hypot(dx,dy) || 1;
@@ -152,5 +209,43 @@ export default class Enemy{
 
   distTo(player){
     return Math.hypot(this.x-player.x, this.y-player.y);
+  }
+
+  fireWeapon(game){
+    if(!game || !game.projectiles) return;
+    if(this.weapon === 'radial'){
+      // fire in 8 directions
+      for(let i=0; i<8; i++){
+        const ang = (i / 8) * TWO_PI;
+        const dx = Math.cos(ang);
+        const dy = Math.sin(ang);
+        game.projectiles.push(new Projectile(this.x, this.y, dx, dy, 100, 'enemy'));
+      }
+    } else if(this.weapon === 'axes'){
+      // fire horizontal and vertical
+      game.projectiles.push(new Projectile(this.x, this.y, 1, 0, 100, 'enemy'));
+      game.projectiles.push(new Projectile(this.x, this.y, -1, 0, 100, 'enemy'));
+      game.projectiles.push(new Projectile(this.x, this.y, 0, 1, 100, 'enemy'));
+      game.projectiles.push(new Projectile(this.x, this.y, 0, -1, 100, 'enemy'));
+    } else if(this.weapon === 'burst'){
+      // fire burst in random directions
+      for(let i=0; i<5; i++){
+        const ang = Math.random() * TWO_PI;
+        const dx = Math.cos(ang);
+        const dy = Math.sin(ang);
+        game.projectiles.push(new Projectile(this.x, this.y, dx, dy, 120, 'enemy'));
+      }
+    } else if(this.weapon === 'targeted'){
+      // fire towards player
+      if(game.player){
+        const dx = game.player.x - this.x;
+        const dy = game.player.y - this.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const dirx = dx / dist;
+        const diry = dy / dist;
+        game.projectiles.push(new Projectile(this.x, this.y, dirx, diry, 150, 'enemy'));
+      }
+    }
+    // add more weapons as needed
   }
 }

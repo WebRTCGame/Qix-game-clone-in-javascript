@@ -1,13 +1,14 @@
 import { WIDTH, HEIGHT } from './constants.js';
 
 export default class Projectile {
-  constructor(x,y,dx,dy,speed=300){
+  constructor(x,y,dx,dy,speed=300, owner='player'){
     this.x = x; this.y = y;
     const mag = Math.hypot(dx,dy) || 1;
     this.vx = (dx/mag) * speed; this.vy = (dy/mag) * speed;
     this.life = 3.0; // seconds
     this.radius = 3;
     this.angle = Math.atan2(this.vy, this.vx);
+    this.owner = owner; // 'player' or 'enemy'
   }
 
   update(dt){
@@ -20,6 +21,6 @@ export default class Projectile {
   }
 
   draw(ctx){
-    ctx.save(); ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.fillStyle = this.owner === 'enemy' ? '#ff4500' : '#ffd700'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill(); ctx.restore();
   }
 }

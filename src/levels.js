@@ -52,7 +52,7 @@ function normalizeLevel(raw, n){
   lvl.powerups = typeof lvl.powerups === 'number' ? lvl.powerups : 1;
   // enemyConfig defaults
   lvl.enemyConfig = lvl.enemyConfig || {};
-  lvl.enemyConfig.main = Object.assign({ minSpeed: 30, maxSpeed: 80, acceleration: 6, minSize: 6, maxSize: 14, hp: lvl.main.hp || 3, color: lvl.main.color || '#ff4500' }, lvl.enemyConfig.main || {});
+  lvl.enemyConfig.main = Object.assign({ minSpeed: 30, maxSpeed: 80, acceleration: 6, minSize: 6, maxSize: 14, hp: lvl.main.hp || 3, color: lvl.main.color || '#ff4500' }, lvl.enemyConfig.main || {}, lvl.main);
   lvl.enemyConfig.minion = Object.assign({ minSpeed: 40, maxSpeed: 140, acceleration: 8, minSize: 3, maxSize: 8 }, lvl.enemyConfig.minion || {});
   return lvl;
 }
