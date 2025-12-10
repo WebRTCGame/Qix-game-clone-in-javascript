@@ -31,10 +31,14 @@ export default class Player {
   shoot(dx, dy, game){
     if(this.weaponAmmo <= 0) return null;
     if(this.weaponCooldown > 0) return null;
-    // spawn projectile
-    const proj = new Projectile(this.x, this.y, dx, dy);
+    // spawn projectile using game's pooling API when available
     this.angle = Math.atan2(dy, dx);
-    if(game.projectiles) game.projectiles.push(proj);
+    if(game && typeof game.spawnProjectile === 'function'){
+      game.spawnProjectile(this.x, this.y, dx, dy, 300, 'player', 3, 3);
+    } else {
+      const proj = new Projectile(this.x, this.y, dx, dy);
+      if(game && game.projectiles) game.projectiles.push(proj);
+    }
     if(game && game.sound) game.sound.play('shoot');
     this.weaponAmmo--; this.weaponCooldown = 0.2; // short delay
     return proj;

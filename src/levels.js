@@ -50,10 +50,47 @@ function normalizeLevel(raw, n){
   lvl.minions = Array.isArray(lvl.minions) ? lvl.minions : [];
   lvl.obstacles = Array.isArray(lvl.obstacles) ? lvl.obstacles : [];
   lvl.powerups = typeof lvl.powerups === 'number' ? lvl.powerups : 1;
+  // per-level music file (path relative to repo). If not provided, default to assets/Music/levelNN.mp3
+  lvl.music = typeof lvl.music === 'string' ? lvl.music : `assets/Music/level${String(n).padStart(2,'0')}.mp3`;
   // enemyConfig defaults
   lvl.enemyConfig = lvl.enemyConfig || {};
-  lvl.enemyConfig.main = Object.assign({ minSpeed: 30, maxSpeed: 80, acceleration: 6, minSize: 6, maxSize: 14, hp: lvl.main.hp || 3, color: lvl.main.color || '#ff4500' }, lvl.enemyConfig.main || {}, lvl.main);
-  lvl.enemyConfig.minion = Object.assign({ minSpeed: 40, maxSpeed: 140, acceleration: 8, minSize: 3, maxSize: 8 }, lvl.enemyConfig.minion || {});
+  // default projectile settings for enemy weapons (can be overridden per-level or per-enemy)
+  lvl.enemyConfig.projectile = Object.assign({ size: 3, speed: 120, life: 3, burstCount: 5, burstSpread: 1.09955742876, radialCount: 8, axesCount: 4 }, lvl.enemyConfig.projectile || {});
+  // sensible defaults for segments: allow per-level `main.segments` or `enemyConfig.main.segments` to override
+  // prefer explicit enemyConfig.* values over per-instance `main` when present
+  const mainDefaultSegments = (typeof lvl.enemyConfig?.main?.segments === 'number') ? lvl.enemyConfig.main.segments : (typeof lvl.main?.segments === 'number' ? lvl.main.segments : 5);
+  const minionDefaultSegments = (typeof lvl.enemyConfig?.minion?.segments === 'number') ? lvl.enemyConfig.minion.segments : (typeof lvl.minion?.segments === 'number' ? lvl.minion.segments : 3);
+  const mainDefaultSegDist = (typeof lvl.enemyConfig?.main?.segmentDistance === 'number') ? lvl.enemyConfig.main.segmentDistance : (typeof lvl.main?.segmentDistance === 'number' ? lvl.main.segmentDistance : null);
+  const minionDefaultSegDist = (typeof lvl.enemyConfig?.minion?.segmentDistance === 'number') ? lvl.enemyConfig.minion.segmentDistance : null;
+  // merge: per-instance `main` values are defaults, then apply `enemyConfig.main` overrides so enemyConfig takes precedence
+  lvl.enemyConfig.main = Object.assign({ minSpeed: 30, maxSpeed: 80, acceleration: 6, minSize: 6, maxSize: 14, hp: lvl.main.hp || 3, color: lvl.main.color || '#ff4500', segments: mainDefaultSegments, segmentSpeed: lvl.main?.segmentSpeed || 150, maxSegmentDist: lvl.main?.maxSegmentDist, segmentDistance: mainDefaultSegDist }, lvl.main || {}, lvl.enemyConfig.main || {});
+  // minion: allow enemyConfig.minion to override defaults
+  lvl.enemyConfig.minion = Object.assign({ minSpeed: 40, maxSpeed: 140, acceleration: 8, minSize: 3, maxSize: 8, segments: minionDefaultSegments, segmentSpeed: lvl.enemyConfig?.minion?.segmentSpeed || 120, segmentDistance: minionDefaultSegDist }, lvl.enemyConfig.minion || {});
+
+  // allow a simple baseSize value to be provided — if present and minSize/maxSize weren't explicitly set, use baseSize
+  if(typeof lvl.enemyConfig.main.baseSize === 'number'){
+    if(typeof lvl.enemyConfig.main.minSize !== 'number' && typeof lvl.enemyConfig.main.maxSize !== 'number'){
+      lvl.enemyConfig.main.minSize = lvl.enemyConfig.main.maxSize = lvl.enemyConfig.main.baseSize;
+    }
+  }
+  if(typeof lvl.enemyConfig.minion.baseSize === 'number'){
+    if(typeof lvl.enemyConfig.minion.minSize !== 'number' && typeof lvl.enemyConfig.minion.maxSize !== 'number'){
+      lvl.enemyConfig.minion.minSize = lvl.enemyConfig.minion.maxSize = lvl.enemyConfig.minion.baseSize;
+    }
+  }
+
+  // link projectile defaults into per-enemy configs unless overridden
+  if(typeof lvl.enemyConfig.main.bulletSize !== 'number') lvl.enemyConfig.main.bulletSize = lvl.enemyConfig.projectile.size;
+  if(typeof lvl.enemyConfig.main.bulletSpeed !== 'number') lvl.enemyConfig.main.bulletSpeed = lvl.enemyConfig.projectile.speed;
+  if(typeof lvl.enemyConfig.minion.bulletSize !== 'number') lvl.enemyConfig.minion.bulletSize = lvl.enemyConfig.projectile.size;
+  if(typeof lvl.enemyConfig.minion.bulletSpeed !== 'number') lvl.enemyConfig.minion.bulletSpeed = lvl.enemyConfig.projectile.speed;
+
+  // merge the global projectile options into each per-enemy section so they are available
+  lvl.enemyConfig.main.projectile = Object.assign({}, lvl.enemyConfig.projectile || {}, lvl.enemyConfig.main.projectile || {});
+  lvl.enemyConfig.minion.projectile = Object.assign({}, lvl.enemyConfig.projectile || {}, lvl.enemyConfig.minion.projectile || {});
+
+  // obstacle defaults
+  lvl.obstacleConfig = lvl.obstacleConfig || { baseW: 4, baseH: 4 };
   return lvl;
 }
 

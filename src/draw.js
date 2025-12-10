@@ -1,10 +1,44 @@
 // Preload sprite images (SVG pixel-art placeholders)
 const _images = {};
 ['player','enemy_main','enemy_minion','powerup','projectile'].forEach(name => {
-  const img = new Image(); img.src = `assets/${name}.svg`; img.alt = name; _images[name] = img;
+  const img = new Image();
+  img.alt = name;
+  // prefer raster PNG for player if available, otherwise fall back to SVG
+  if(name === 'player'){
+    img.src = 'assets/player.png';
+    img.onerror = () => { img.onerror = null; img.src = 'assets/player.svg'; };
+  } else { img.src = `assets/${name}.svg`; }
+  _images[name] = img;
 });
 // obstacle sprite - prefer a raster PNG if available (we download assets/obstacle.png)
 { const img = new Image(); img.src = `assets/obstacle.png`; img.alt = 'obstacle'; _images.obstacle = img; }
+
+// cached shadow canvases keyed by image src + size
+const _shadowCache = new Map();
+
+// cached tinted overlays keyed by src+size+hue+alpha
+const _tintCache = new Map();
+
+function _getTintedCanvas(img, w, h, hue = 0, alpha = 0.2){
+  if(!img || !img.src) return null;
+  const key = `${img.src}|${Math.max(1,Math.floor(w))}x${Math.max(1,Math.floor(h))}|h${Math.round(hue)}|a${Math.round(alpha*100)}`;
+  let cached = _tintCache.get(key);
+  if(cached) return cached;
+  try{
+    const tmp = document.createElement('canvas'); tmp.width = Math.max(1, Math.floor(w)); tmp.height = Math.max(1, Math.floor(h));
+    const tctx = tmp.getContext('2d');
+    tctx.clearRect(0,0,tmp.width,tmp.height);
+    // draw the sprite at full area
+    tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+    // clip a solid color to the sprite alpha using source-in
+    tctx.globalCompositeOperation = 'source-in';
+    tctx.fillStyle = `hsla(${Math.round(hue)},72%,52%,${alpha})`;
+    tctx.fillRect(0,0,tmp.width,tmp.height);
+    tctx.globalCompositeOperation = 'source-over';
+    _tintCache.set(key, tmp);
+    return tmp;
+  }catch(e){ return null; }
+}
 
 const Draw = {
   clear(ctx, w, h, bg){
@@ -90,7 +124,10 @@ const Draw = {
   },
   trail(ctx, trail, fuse, slow){
     if(!trail || !trail.length) return;
+    // animate the trail with a moving dash so the capture animation feels active
     ctx.strokeStyle = slow ? '#ffb347' : '#fff'; ctx.lineWidth = 2;
+    const T = (performance.now() || Date.now()) / 1000;
+    ctx.setLineDash([8, 8]); ctx.lineDashOffset = -T * 48;
     ctx.beginPath();
     ctx.moveTo(trail[0].x, trail[0].y);
     for(let i=1;i<trail.length;i++) ctx.lineTo(trail[i].x, trail[i].y);
@@ -98,6 +135,8 @@ const Draw = {
     // draw nodes
     ctx.fillStyle = '#fff';
     for(const p of trail) ctx.fillRect(p.x-1.5, p.y-1.5, 3,3);
+    // reset dash style for other callers
+    ctx.setLineDash([]);
     // draw fuse progress if active
     if(fuse && fuse.active && trail.length > 1){
       // fuse.progress counts segments traveled; map to segment index
@@ -118,7 +157,9 @@ const Draw = {
     if(img && img.complete){
       const angle = (typeof player.angle === 'number') ? player.angle : 0;
       // draw sprite visually larger (300%) without changing collision size
-      const scale = 3.0;
+      const baseScale = 3.0;
+      const t = (performance.now() || Date.now()) / 1000;
+      const scale = baseScale * (1 + Math.sin(t * 3.2) * 0.035); // gentle pulse
       const drawW = pW * scale;
       if(mode === 'shadow' || mode === 'both'){
         // draw shadow first (offset +40,+40)
@@ -157,7 +198,13 @@ const Draw = {
         this.drawShadow(ctx, img, pu.x, pu.y, w, w, 0);
       }
       if(mode === 'sprite' || mode === 'both'){
-        ctx.drawImage(img, pu.x - pu.size, pu.y - pu.size, w, w);
+        // gentle bob + pulse to call attention
+        const t = (performance.now() || Date.now()) / 1000;
+        const bob = Math.sin(t * 2.2) * 3;
+        const pulse = 1 + Math.sin(t * 2.6) * 0.06;
+        ctx.save(); ctx.translate(pu.x, pu.y + bob); ctx.scale(pulse, pulse);
+        ctx.drawImage(img, -pu.size, -pu.size, w, w);
+        ctx.restore();
       }
     } else {
       if(mode === 'sprite' || mode === 'both'){
@@ -175,7 +222,14 @@ const Draw = {
         this.drawShadow(ctx, img, proj.x, proj.y, w, w, a);
       }
       if(mode === 'sprite' || mode === 'both'){
+        // draw a stretched, slightly-glowing projectile to imply motion
         ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(a + Math.PI/2);
+        // soft glow
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.shadowColor = proj.owner === 'enemy' ? 'rgba(255,120,80,0.9)' : 'rgba(255,220,120,0.9)'; ctx.shadowBlur = Math.max(2, Math.floor(w * 0.6));
+        ctx.beginPath(); ctx.ellipse(0, 0, w * 1.3, Math.max(1, w * 0.55), 0, 0, Math.PI*2);
+        ctx.fillStyle = proj.owner === 'enemy' ? 'rgba(255,120,80,0.95)' : 'rgba(255,220,120,0.95)'; ctx.fill();
+        ctx.restore();
+        // sprite over the glow for sharper center if image exists
         ctx.drawImage(img, -w/2, -w/2, w, w);
         ctx.restore();
       }
@@ -192,6 +246,34 @@ const Draw = {
     if(img && img.complete){
       const w = (enemy.radius + (enemy.type==='main'?4:2)) * 2;
       const a = Math.atan2(enemy.vy || 0, enemy.vx || 1);
+      // telegraph visuals: show aim cone when enemy is aiming
+      try{
+        if(enemy.firingState === 'aiming'){
+          const aim = (typeof enemy.aimTargetAngle === 'number') ? enemy.aimTargetAngle : a;
+          const projCfg = enemy.config?.projectile || {};
+          const spread = typeof enemy.config?.burstSpread === 'number' ? enemy.config.burstSpread : (typeof projCfg.burstSpread === 'number' ? projCfg.burstSpread : Math.PI * 0.35);
+          ctx.save();
+          ctx.translate(enemy.x, enemy.y);
+          ctx.rotate(aim + Math.PI/2);
+          ctx.globalAlpha = 0.65;
+          ctx.fillStyle = 'rgba(255,80,80,0.14)';
+          if(enemy.weapon === 'radial'){
+            ctx.beginPath(); ctx.arc(0,0, enemy.radius + 10, 0, Math.PI*2); ctx.fill();
+          } else if(enemy.weapon === 'burst'){
+            // draw a triangular wedge to show approximate burst zone
+            ctx.beginPath(); const r = enemy.radius + 40; ctx.moveTo(0,0); ctx.arc(0,0, r, -spread/2, spread/2); ctx.closePath(); ctx.fill();
+          } else if(enemy.weapon === 'axes' || enemy.weapon === 'targeted'){
+            // draw a narrow aim line
+            ctx.strokeStyle = 'rgba(255,80,80,0.9)'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -(enemy.radius + 40)); ctx.stroke();
+          }
+          ctx.restore();
+        }
+        // quick firing glow while actively firing
+        if(enemy.firingState === 'firing'){
+          ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = 'rgba(255,160,40,0.12)'; ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius + 10, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        }
+      }catch(e){ /* best-effort drawing, don't crash */ }
       // draw segments shadows first (if mode includes shadow)
       if(enemy.segments && enemy.segments.length > 0 && (mode === 'shadow' || mode === 'both')){
         for(let i = enemy.segments.length - 1; i >= 0; i--){
@@ -212,16 +294,45 @@ const Draw = {
           const seg = enemy.segments[i];
           const sw = w * 0.8;
           const sa = seg.angle;
-          ctx.save(); ctx.translate(seg.x, seg.y); ctx.rotate(sa + Math.PI/2);
+          // per-segment pulse + tint
+          const phase = enemy._pulsePhase || 0;
+          const hueOffset = (enemy._segmentHueOffsets && enemy._segmentHueOffsets[i]) ? enemy._segmentHueOffsets[i] : (i * 6);
+          const hue = Math.round(((enemy._hue || 0) + hueOffset) % 360);
+          const segPulse = 1 + Math.sin(phase + i * 0.35) * (enemy.type === 'main' ? 0.04 : 0.08);
+          ctx.save(); ctx.translate(seg.x + (enemy.renderOffset.x || 0) * 0.25, seg.y + (enemy.renderOffset.y || 0) * 0.25); ctx.rotate(sa + Math.PI/2); ctx.scale(segPulse, segPulse);
           ctx.drawImage(img, -sw/2, -sw/2, sw, sw);
-          ctx.restore();
+          // tinted overlay to add per-segment color variety (use cached tinted canvas to preserve alpha)
+          const tintCanvas = _getTintedCanvas(img, sw, sw, hue, 0.22);
+          if(tintCanvas){ ctx.drawImage(tintCanvas, -sw/2, -sw/2, sw, sw); }
+          ctx.restore(); ctx.globalCompositeOperation = 'source-over';
         }
       }
       // head sprite (if mode includes sprite)
       if(mode === 'sprite' || mode === 'both'){
-        ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(a + Math.PI/2);
+        // head pulse + hue tint
+        const phase = enemy._pulsePhase || 0;
+        const headPulse = 1 + Math.sin(phase * (enemy.type === 'main' ? 1.75 : 2.6)) * (enemy.type === 'main' ? 0.06 : 0.12);
+        const headHue = Math.round((enemy._hue || 0) % 360);
+        // for fast-moving minions, draw a couple of faded afterimages opposite velocity
+        const spd = Math.hypot(enemy.vx || 0, enemy.vy || 0);
+        const minThresh = (enemy.config?.minSpeed) ? (enemy.config.minSpeed * 0.85) : 36;
+        if(enemy.type === 'minion' && spd > minThresh){
+          const nx = (enemy.vx / spd) || 0, ny = (enemy.vy / spd) || 0;
+          for(let k=1;k<=2;k++){
+            const off = k * Math.max(4, Math.min(16, w * 0.25));
+            ctx.save(); ctx.globalAlpha = 0.14 * (1 - k*0.15);
+            ctx.translate(enemy.x - nx * off, enemy.y - ny * off);
+            ctx.rotate(a + Math.PI/2);
+            ctx.scale(1 - k*0.08, 1 - k*0.08);
+            ctx.drawImage(img, -w/2, -w/2, w, w);
+            ctx.restore(); ctx.globalAlpha = 1;
+          }
+        }
+        ctx.save(); ctx.translate(enemy.x + (enemy.renderOffset.x || 0), enemy.y + (enemy.renderOffset.y || 0)); ctx.rotate(a + Math.PI/2); ctx.scale(headPulse, headPulse);
         ctx.drawImage(img, -w/2, -w/2, w, w);
-        ctx.restore();
+        const headTint = _getTintedCanvas(img, w, w, headHue, 0.18);
+        if(headTint){ ctx.drawImage(headTint, -w/2, -w/2, w, w); }
+        ctx.restore(); ctx.globalCompositeOperation = 'source-over';
         if(enemy.type === 'main'){
           ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText(enemy.hp || 1, enemy.x, enemy.y);
@@ -261,14 +372,19 @@ const Draw = {
     ctx.rotate(angle + Math.PI/2);
     if(img && img.complete){
       try{
-        // render onto an offscreen canvas so we don't alter main ctx compositing
-        const tmp = document.createElement('canvas'); tmp.width = Math.max(1, Math.floor(w)); tmp.height = Math.max(1, Math.floor(h));
-        const tctx = tmp.getContext('2d');
-        tctx.clearRect(0,0,tmp.width,tmp.height);
-        tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
-        tctx.globalCompositeOperation = 'source-in';
-        tctx.fillStyle = 'rgba(0,0,0,0.5)';
-        tctx.fillRect(0,0,tmp.width,tmp.height);
+        // attempt to reuse cached shadow image for (img.src,w,h)
+        const key = `${img.src}|${Math.max(1, Math.floor(w))}x${Math.max(1, Math.floor(h))}`;
+        let tmp = _shadowCache.get(key);
+        if(!tmp){
+          tmp = document.createElement('canvas'); tmp.width = Math.max(1, Math.floor(w)); tmp.height = Math.max(1, Math.floor(h));
+          const tctx = tmp.getContext('2d');
+          tctx.clearRect(0,0,tmp.width,tmp.height);
+          tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+          tctx.globalCompositeOperation = 'source-in';
+          tctx.fillStyle = 'rgba(0,0,0,0.5)';
+          tctx.fillRect(0,0,tmp.width,tmp.height);
+          _shadowCache.set(key, tmp);
+        }
         ctx.drawImage(tmp, -w/2, -h/2, w, h);
       }catch(e){
         // fallback to simple oval if offscreen fails

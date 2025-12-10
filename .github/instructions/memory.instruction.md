@@ -53,3 +53,5 @@ applyTo: '**'
  - Memory updated: 2025-12-06, fixed shadow compositor bug: drawShadow now uses an offscreen canvas to avoid altering main ctx compositing state which could cause rendering to go black
  - Memory updated: 2025-12-06, adjusted drop shadow offset: shadows now offset +20px X/Y (previously +40px)
  - Memory updated: 2025-12-06, obstacle shadows: added drop shadows for grouped obstacle sprites (drawn before obstacle sprite render)
+ - Memory updated: 2025-12-08, visual polish: added per-enemy hue/pulse and per-segment tint overlays in Draw.enemy
+ - Memory updated: 2025-12-08, visual polish: added minion afterimage ghosts, projectile stretch+glow, animated capture-trail dashes, and gentle player/powerup pulses

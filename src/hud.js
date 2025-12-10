@@ -21,9 +21,45 @@ export function setSuperText(text){ const el = document.getElementById('super');
 export function setEnemies(current, total){ const el = document.getElementById('enemies'); if(!el) return; el.textContent = `ENEMIES: ${current}/${total}`; }
 export function setPowerup(type, ttl){ const el = document.getElementById('powerup'); if(!el) return; el.textContent = type ? `POWERUP: ${type}${ttl?(' ('+ttl.toFixed(1)+'s)'):''}` : ''; }
 export function setAmmo(ammo){ const el = document.getElementById('ammo'); if(!el) return; el.textContent = `AMMO: ${ammo}`; }
+// add small helper to highlight when ammo is non-zero
+export function _highlightAmmoIfNeeded(ammo){ const el = document.getElementById('ammo'); if(!el) return; if(Number(ammo) > 0) el.classList.add('has-ammo'); else el.classList.remove('has-ammo'); }
 export function setBossHP(hp, max){ const el = document.getElementById('bosshp'); if(!el) return; if(hp === null) el.textContent = ''; else el.textContent = `BOSS HP: ${hp}/${max}`; }
 export function setLevelName(name){ const el = document.getElementById('levelname'); if(!el) return; el.textContent = name ? `${String(name).toUpperCase()}` : ''; }
 
 // Display detected cave/area overlays. `caves` is an array of cave objects
 // returned from Board.detectCaves. Each cave should include `id` and `color`.
 export function setCaves(caves){ const cnt = (caves && caves.length) ? caves.length : 0; const el = document.getElementById('areas-count'); if(el) el.textContent = `Areas: ${cnt}`; const list = document.getElementById('areas-list'); if(!list) return; list.innerHTML = ''; if(!caves || !caves.length) return; for(const c of caves){ const wrapper = document.createElement('div'); wrapper.style.display = 'flex'; wrapper.style.alignItems = 'center'; wrapper.style.gap = '6px'; const sw = document.createElement('div'); sw.style.width = '20px'; sw.style.height = '14px'; sw.style.background = c.color || 'rgba(48,200,255,0.12)'; sw.style.border = `1px solid ${c.strokeColor || 'rgba(48,200,255,0.6)'}`; sw.style.borderRadius = '2px'; const label = document.createElement('div'); label.style.fontSize = '12px'; label.style.color = '#ddd'; label.textContent = `#${c.id} (${c.cells.length})`; wrapper.appendChild(sw); wrapper.appendChild(label); list.appendChild(wrapper); } }
+
+// Debug level sidebar utilities — used for quick jumping between levels while debugging
+let _levelSidebarEl = null;
+let _levelIcons = [];
+export function initLevelSidebar(totalLevels, opts = {}){
+	try{
+		const root = document.getElementById('game-root') || document.body;
+		let cont = document.getElementById('level-sidebar');
+		if(!cont){ cont = document.createElement('div'); cont.id = 'level-sidebar'; root.appendChild(cont); }
+		_levelSidebarEl = cont;
+		_levelSidebarEl.innerHTML = '';
+		const title = document.createElement('div'); title.className = 'level-sidebar-title'; title.textContent = opts.title || 'Level Selector (debug)'; _levelSidebarEl.appendChild(title);
+		_levelIcons = [];
+		const onClick = typeof opts.onClick === 'function' ? opts.onClick : null;
+		for(let i=1;i<=Math.max(1, Number(totalLevels) || 1); i++){
+			const entry = document.createElement('div'); entry.className = 'level-entry';
+			const icon = document.createElement('div'); icon.className = 'level-icon'; icon.tabIndex = 0; icon.setAttribute('role','button'); icon.dataset.level = String(i);
+			const idx = String(i).padStart(2,'0');
+			const bg = `assets/backgrounds/level${idx}/uncaptured.png`;
+			icon.style.backgroundImage = `url('${bg}')`;
+			// click handler: prefer provided callback, then global game.gotoLevel fallback
+			const handler = (ev)=>{ ev.preventDefault(); if(onClick) return onClick(i); if(window && window.game && typeof window.game.gotoLevel === 'function') return window.game.gotoLevel(i); console.warn('No onClick handler or game.gotoLevel available for level selector'); };
+			icon.addEventListener('click', handler);
+			icon.addEventListener('keypress', (e)=>{ if(e.key === 'Enter' || e.key === ' ') handler(e); });
+			const label = document.createElement('div'); label.className = 'level-label'; label.textContent = `#${String(i).padStart(2,'0')}`;
+			entry.appendChild(icon); entry.appendChild(label);
+			_levelIcons.push(icon);
+			_levelSidebarEl.appendChild(entry);
+		}
+		_levelSidebarEl.setAttribute('aria-hidden', 'false');
+	}catch(e){ console.warn('initLevelSidebar failed', e); }
+}
+
+export function setActiveLevel(n){ try{ if(!_levelIcons || !_levelIcons.length) return; const idx = Number(n) || 0; for(const ic of _levelIcons){ if(Number(ic.dataset.level) === idx) ic.classList.add('active'); else ic.classList.remove('active'); } }catch(e){ /* best-effort */ } }

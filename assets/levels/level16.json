@@ -5,6 +5,7 @@
   "fill": "#ffd86b",
   "bgUncaptured": "assets/backgrounds/level16/level16 background.jpg",
   "bgCaptured": "assets/backgrounds/level16/captured.jpg",
+  "music": "assets/Music/level16.mp3",
   "enemyImages": { "main": "assets/sprites/enemies/main/level16-main.png", "minion": "assets/sprites/enemies/minion/level16-minion.png", "projectile": "assets/sprites/projectiles/level16-proj.png", "powerup": "assets/sprites/powerups/level16-powerup.png" },
   "obstacleImage": "assets/sprites/obstacles/level16-obstacle.png",
   "main": { "hp": 20, "color": "#ff0000", "x": 400, "y": 200, "pattern": "aggro", "aggression": 2.5, "temperament": "aggressive", "weapon": "radial", "fireRate": 1.5 },
@@ -30,8 +31,10 @@
   ],
   "powerups": 4,
   "enemyConfig": {
-    "main": { "minSpeed": 90, "maxSpeed": 180, "acceleration": 14, "minSize": 12, "maxSize": 24, "hp": 16 },
-    "minion": { "minSpeed": 90, "maxSpeed": 200, "acceleration": 16, "minSize": 6, "maxSize": 12 }
+    "projectile": { "size": 7, "speed": 200, "life": 3, "burstCount": 8, "burstSpread": 1.4, "radialCount": 12, "axesCount": 6 },
+    "main": { "minSpeed": 90, "maxSpeed": 170, "acceleration": 12, "minSize": 16, "maxSize": 30, "baseSize": 23, "segments": 12, "segmentSpeed": 260, "segmentDistance": 56 },
+    "minion": { "minSpeed": 100, "maxSpeed": 240, "acceleration": 20, "minSize": 8, "maxSize": 16, "baseSize": 12, "segments": 8, "segmentSpeed": 180, "segmentDistance": 24 }
   },
+  "obstacleConfig": { "baseW": 4, "baseH": 4 },
   "completionBonus": { "type": "mega", "value": 25000, "note": "final stage big reward" }
 }

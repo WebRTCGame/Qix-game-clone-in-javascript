@@ -5,6 +5,7 @@
   "fill": "#ffa07a",
   "bgUncaptured": "assets/backgrounds/level14/level14 background.jpg",
   "bgCaptured": "assets/backgrounds/level14/captured.jpg",
+  "music": "assets/Music/level14.mp3",
   "enemyImages": { "main": "assets/sprites/enemies/main/level14-main.png", "minion": "assets/sprites/enemies/minion/level14-minion.png", "projectile": "assets/sprites/projectiles/level14-proj.png", "powerup": "assets/sprites/powerups/level14-powerup.png" },
   "obstacleImage": "assets/sprites/obstacles/level14-obstacle.png",
   "main": { "hp": 16, "color": "#ff3366", "x": 400, "y": 200, "pattern": "aggro", "aggression": 2.2, "temperament": "aggressive", "weapon": "radial", "fireRate": 1.0 },
@@ -24,7 +25,9 @@
   "powerups": 3,
   "completionBonus": { "type": "vulnerable_point", "value": 5000, "note": "bonus for hitting exposed weak points" },
   "enemyConfig": {
-    "main": { "minSpeed": 75, "maxSpeed": 135, "acceleration": 11, "minSize": 12, "maxSize": 18, "hp": 12 },
-    "minion": { "minSpeed": 85, "maxSpeed": 180, "acceleration": 15, "minSize": 6, "maxSize": 10 }
-  }
+    "projectile": { "size": 6, "speed": 180, "life": 3, "burstCount": 6, "burstSpread": 1.2, "radialCount": 8, "axesCount": 4 },
+    "main": { "minSpeed": 75, "maxSpeed": 135, "acceleration": 11, "minSize": 12, "maxSize": 18, "hp": 12, "baseSize": 15, "segments": 10, "segmentSpeed": 240, "segmentDistance": 50 },
+    "minion": { "minSpeed": 85, "maxSpeed": 180, "acceleration": 15, "minSize": 6, "maxSize": 10, "baseSize": 8, "segments": 6, "segmentSpeed": 160, "segmentDistance": 20 }
+  },
+  "obstacleConfig": { "baseW": 4, "baseH": 4 }
 }

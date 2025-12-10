@@ -84,4 +84,15 @@ canvas{
 #hud-footer #areas-count{color:#ffd27f}
 #hud-footer #areas-list > div{opacity:0.95}
 #hud-footer #enemies, #hud-footer #ammo, #hud-footer #mult {font-size:10px;color:#99aabb}
+/* highlight ammo when available */
+#hud-footer #ammo.has-ammo{color:#ffd86b;font-weight:700;text-shadow:0 0 6px rgba(255,184,107,0.6)}
 #hud-footer #bosshp{color:#ff7f7f}
+
+/* Debug level sidebar for quick jumping between levels during development */
+#level-sidebar{position:absolute;left:calc(100% + 18px);top:88px;width:160px;max-height:680px;overflow:auto;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(1,19,26,0.9),rgba(1,12,16,0.85));box-shadow:0 6px 30px rgba(0,0,0,0.6);border:2px solid rgba(0,100,130,0.24);color:#cfeaff;font-family:'Press Start 2P',monospace;font-size:11px;z-index:40;}
+.level-entry{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;margin-bottom:6px}
+.level-icon{width:72px;height:72px;border-radius:6px;background:#00181f;background-size:cover;background-position:center;border:2px solid rgba(255,255,255,0.05);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;text-shadow:0 0 6px rgba(0,0,0,0.6);transition:transform 0.12s ease, box-shadow 0.12s ease;}
+.level-icon:hover{transform:translateY(-2px) scale(1.04);box-shadow:0 6px 18px rgba(0,200,255,0.12)}
+.level-icon.active{box-shadow:0 0 14px rgba(0,255,255,0.14);outline:2px solid rgba(0,200,255,0.12)}
+.level-label{font-size:10px;color:#99d8ff;margin-top:4px}
+.level-sidebar-title{font-size:11px;color:#bfefff;margin-bottom:8px;text-align:center}

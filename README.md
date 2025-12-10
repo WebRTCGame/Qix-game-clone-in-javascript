@@ -44,3 +44,25 @@ Notes/TODO:
 How to run:
 - Open Index.html in a modern browser (Chrome/Edge/Firefox) that supports ES modules.
 - The game is locked to 30 fps and runs on a 800x800 canvas.
+
+Per-level music
+- Place MP3 files in assets/Music/. By default levels will look for files named `levelNN.mp3` (e.g. level01.mp3).
+- To override the default, add a `music` field to a level JSON in `assets/levels/levelNN.json` with a path (for example `assets/Music/mytrack.mp3`).
+ - Background music now gradually speeds up during a level: playback rate increases smoothly by 0.1 per minute of level time (e.g. 1.1 at 60s, 1.2 at 120s).
+	 The game will attempt to enable pitch-preserving playback when the browser supports it, but behavior varies by browser — changing speed may still alter pitch on some platforms.
+
+Sound effects (assets/sounds)
+- spark.mp3: slide1 (Sethroph @ FreeSound) — CC0 — https://freesound.org/s/323420/
+- die.mp3: cannon2 (Isaac200000 @ FreeSound) — CC0 — https://freesound.org/s/184650/
+- hit.mp3: punch1 (Vladimir @ Soundbible) — CC0 — http://soundbible.com/1952-Punch-Or-Whack.html
+- pop.mp3: click3 (coobek @ FreeSound) — CC0 — https://freesound.org/s/185611/
+- powerup.mp3: resonance2 (KP @ Soundbible) — CC0 — http://soundbible.com/1639-Power-Up.html
+- shoot.mp3: beep5 (Soundwarf @ FreeSound) — CC0 — https://freesound.org/s/387532/
+- split.mp3: scale3 (Big Daddy @ Soundbible) — CC0 — http://soundbible.com/1619-Music-Box.html
+- super.mp3: fanfare1 (_MC5_ @ FreeSound) — CC-BY-3.0 — https://freesound.org/s/524849/
+- capture.mp3: resonance1 (KP @ Soundbible) — CC0 — http://soundbible.com/1686-Appear.html
+- powerup_spawn.mp3: click5 (jorickhoofd @ FreeSound) — CC-BY-3.0 — https://freesound.org/s/160052/
+- enemy_fire.mp3: beep6 (kickhat @ FreeSound) — CC0 — https://freesound.org/s/264446/
+- level_start.mp3: jingle1 (umwelt @ FreeSound) — CC-BY-3.0 — https://freesound.org/s/67760/
+
+These audio files were downloaded from the SoundFX collection (https://github.com/rse/soundfx) which aggregates freely-licensed SFX. Files marked CC-BY require attribution and are listed above with origin links.

@@ -5,6 +5,7 @@
   "fill": "#1e90ff",
   "bgUncaptured": "assets/backgrounds/level01/level01 background.jpg",
   "bgCaptured": "assets/backgrounds/level01/captured.jpg",
+  "music": "assets/Music/level01.mp3",
   "enemyImages": { "main": "assets/sprites/enemies/main/level01-main.png", "minion": "assets/sprites/enemies/minion/level01-minion.png", "projectile": "assets/sprites/projectiles/level01-proj.png", "powerup": "assets/sprites/powerups/level01-powerup.png" },
   "obstacleImage": "assets/sprites/obstacles/level01-obstacle.png",
   "main": { "hp": 3, "color": "#ff4500", "x": 400, "y": 160, "pattern": "patrol", "aggression": 0.5, "temperament": "passive", "weapon": null, "fireRate": 0, "segments": 3, "segmentSpeed": 120, "maxSegmentDist": 25 },
@@ -16,15 +17,17 @@
   ],
   "obstacles": [
     { "r": 14, "c": 10, "w": 4, "h": 4 },
-    { "r": 14, "c": 26, "w": 6, "h": 4 },
-    { "r": 30, "c": 44, "w": 8, "h": 6 },
-    { "r": 50, "c": 12, "w": 10, "h": 6 }
+    { "r": 14, "c": 26, "w": 4, "h": 4 },
+    { "r": 30, "c": 44, "w": 4, "h": 4 },
+    { "r": 50, "c": 12, "w": 4, "h": 4 }
   ],
   "powerups": 1,
   "completionBonus": { "type": "intro", "value": 1000, "note": "small intro completion bonus" }
   ,
   "enemyConfig": {
-    "main": { "minSpeed": 30, "maxSpeed": 70, "acceleration": 6, "minSize": 6, "maxSize": 10 },
-    "minion": { "minSpeed": 40, "maxSpeed": 100, "acceleration": 8, "minSize": 3, "maxSize": 6 }
-  }
+    "projectile": { "size": 3, "speed": 100, "life": 3, "burstCount": 5, "burstSpread": 1.09955742876, "radialCount": 8, "axesCount": 4 },
+    "main": { "minSpeed": 5, "maxSpeed": 70, "acceleration": 6, "minSize": 6, "maxSize": 10, "baseSize": 8, "segments": 10, "segmentSpeed": 120, "segmentDistance": 24 },
+    "minion": { "minSpeed": 20, "maxSpeed": 70, "acceleration": 3, "minSize": 3, "maxSize": 6, "baseSize": 4, "segments": 5, "segmentSpeed": 1120, "segmentDistance": 1 }
+  },
+  "obstacleConfig": { "baseW": 4, "baseH": 4 }
 }

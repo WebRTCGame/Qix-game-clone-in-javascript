@@ -1,12 +1,13 @@
 import Player from './player.js';
 import Enemy from './enemy.js';
 import Draw from './draw.js';
+import Projectile from './projectile.js';
 import Input from './input.js';
 import Sound from './sound.js';
 import Particles from './particles.js';
 import Board from './board.js';
 import { linesIntersect, pointToSegmentDistance } from './collision.js';
-import { setPercent, setScore, setLives, setRound, setTime, setMultiplier, setStatus, setHighScore, setSuperText, setEnemies, setPowerup, setAmmo, setBossHP, setLevelName, setCaves } from './hud.js';
+import { setPercent, setScore, setLives, setRound, setTime, setMultiplier, setStatus, setHighScore, setSuperText, setEnemies, setPowerup, setAmmo, setBossHP, setLevelName, setCaves, setActiveLevel, _highlightAmmoIfNeeded } from './hud.js';
 import Powerup from './powerup.js';
 import LEVELS from './levels.js';
 import { WIDTH, HEIGHT, CELL, COLS, ROWS, FPS, CAPTURE_PERCENT, LEVEL_COMPLETE_PERCENT, BOUNCE_DAMP, DESTROY_REGION_THRESHOLD, ENEMY_DESTROY_SCORE } from './constants.js';
@@ -28,6 +29,16 @@ export default class Game {
     this._pHeld = false;
     this._enemySizeTimer = 0; // throttle periodic sizing updates
     this._enemySizeInterval = 0.25; // seconds
+    // background music element (per-level)
+    this.bgMusic = null;
+    this.musicVolume = 0.45;
+    // music speed control (continuous increase)
+    // base playback rate, amount added per minute, and a soft maximum
+    this.musicBaseRate = 1.0;
+    this.musicRatePerMinute = 0.1; // +0.1 per minute
+    this.musicMaxRate = 2.5; // clamp to avoid runaway speeds
+    // attempt to preserve pitch where the browser supports it
+    this.musicPreservePitch = true;
   } // constructor
 
   init(){
@@ -63,7 +74,6 @@ export default class Game {
     for(let i=0;i<regions.length;i++){
       for(const cell of regions[i].cells){ cellToRegion[cell.r+','+cell.c] = i; }
     }
-
     // track enemy cells
     const enemyCells = new Set();
     for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); if(cell) enemyCells.add(cell.r + ',' + cell.c); }
@@ -77,6 +87,40 @@ export default class Game {
       for(const cell of region.cells){ if(enemyCells.has(cell.r + ',' + cell.c)){ hasEnemy = true; break; } }
       if(!hasEnemy){
         for(const cell of region.cells){ const cc = this.board.getCell(cell.r, cell.c); if(cc && cc.isEmpty()){ this.board.setCell(cell.r, cell.c, 1); newFilled++; newlyFilled.add(cell.r + ',' + cell.c); } }
+      }
+    }
+
+    // powerup pickups
+    for(let i = this.powerups.length - 1; i >= 0; i--){
+      const pu = this.powerups[i];
+      if(!pu) continue;
+      if(pu.collidesWithPlayer && pu.collidesWithPlayer(this.player)){
+        // apply pickup
+        if(pu.type === 'life'){
+          this.lives = Math.max(0, (this.lives || 0) + 1);
+          setLives(this.lives);
+          this._floatingTexts.push({ text: '+1 life', x: this.player.x, y: this.player.y, size: 18, color: '#8bff8b', life: 1.6 });
+          this.sound.play && this.sound.play('super');
+        } else if(pu.type === 'weapon'){
+          this.player.weaponAmmo = (this.player.weaponAmmo || 0) + 5;
+          this._floatingTexts.push({ text: '+ammo', x: pu.x, y: pu.y, size: 16, color: '#ffd700', life: 1.4 });
+          this.sound.play && this.sound.play('powerup');
+        } else if(pu.type === 'speed'){
+          this.player.speedTimer = Math.max(this.player.speedTimer || 0, 6);
+          this.player.speedMul = 1.6;
+          this._floatingTexts.push({ text: 'SPEED', x: pu.x, y: pu.y, size: 16, color: '#7ad7ff', life: 1.4 });
+          this.sound.play && this.sound.play('powerup');
+        } else if(pu.type === 'shield'){
+          this.player.shieldTimer = Math.max(this.player.shieldTimer || 0, 6);
+          this._floatingTexts.push({ text: 'SHIELD', x: pu.x, y: pu.y, size: 16, color: '#9ad66b', life: 1.4 });
+          this.sound.play && this.sound.play('powerup');
+        } else {
+          // generic
+          this.sound.play && this.sound.play('powerup');
+        }
+        // remove the picked powerup
+        this.powerups.splice(i,1);
+        continue;
       }
     }
 
@@ -123,10 +167,10 @@ export default class Game {
     // Check if enemies are split across different regions (end level)
     const enemyRegionSet = new Set();
     for(const enemy of this.enemies){ const cell = this.cellFor(enemy.x, enemy.y); const rid = cellToRegion[cell.r + ',' + cell.c]; if(typeof rid === 'number') enemyRegionSet.add(rid); }
-    if(enemyRegionSet.size > 1){ setStatus('Qix Split! Level Cleared'); this.nextLevel(); return; }
+    if(enemyRegionSet.size > 1){ setStatus('Qix Split! Level Cleared'); try{ this.sound.play && this.sound.play('super'); }catch(e){} this.nextLevel(); return; }
 
     // Also consider level complete when no enemies remain
-    if(this.enemies.length === 0){ setStatus('All enemies eliminated! Level Cleared'); this.nextLevel(); return; }
+    if(this.enemies.length === 0){ setStatus('All enemies eliminated! Level Cleared'); try{ this.sound.play && this.sound.play('super'); }catch(e){} this.nextLevel(); return; }
 
     if(newFilled > 0){ this.sound.play('capture'); if(this.particles) this.particles.add(this.player.x, this.player.y, 20); }
 
@@ -184,6 +228,24 @@ export default class Game {
     // update level timer and display
     this.levelTime += dt;
     try{ setTime(this.levelTime); }catch(e){}
+    // continuous, smooth background music speed-up: increase by musicRatePerMinute per minute
+    try{
+      if(this.bgMusic && typeof this.bgMusic.playbackRate !== 'undefined'){
+        const rate = Math.min(this.musicMaxRate, this.musicBaseRate + (this.levelTime / 60.0) * this.musicRatePerMinute);
+        const current = Number(this.bgMusic.playbackRate || 1.0);
+        if(Math.abs(current - rate) > 0.0005){
+          try{ this.bgMusic.playbackRate = rate; }catch(e){}
+        }
+        // request browsers that support pitch-preserving playback to keep pitch unchanged
+        try{
+          if(this.musicPreservePitch){
+            if('preservesPitch' in this.bgMusic) this.bgMusic.preservesPitch = true;
+            else if('mozPreservesPitch' in this.bgMusic) this.bgMusic.mozPreservesPitch = true;
+            else if('webkitPreservesPitch' in this.bgMusic) this.bgMusic.webkitPreservesPitch = true;
+          }
+        }catch(e){}
+      }
+    }catch(e){}
     this.handleInput(dt);
     this.player.update(dt, this);
     // update enemies - compute current regions so local perceived area can be used
@@ -246,28 +308,50 @@ export default class Game {
     // update particles
     if(this.particles) this.particles.update(dt);
 
+    // build simple spatial buckets for enemies to accelerate projectile -> enemy collision checks
+    const _bucketSize = 96; // bucket size in pixels
+    const enemyBuckets = new Map();
+    for(const e of this.enemies){
+      const bx = Math.floor((e.x||0) / _bucketSize);
+      const by = Math.floor((e.y||0) / _bucketSize);
+      const k = `${bx},${by}`;
+      if(!enemyBuckets.has(k)) enemyBuckets.set(k, []);
+      enemyBuckets.get(k).push(e);
+    }
+
     // update projectiles
     for(let i=this.projectiles.length-1;i>=0;i--){
       const p = this.projectiles[i]; p.update(dt);
       // remove if hit filled cell or out of bounds
       const pc = this.cellFor(p.x,p.y);
       if(p.isOutOfBounds() || (pc && !(this.board.getCell(pc.r,pc.c) && this.board.getCell(pc.r,pc.c).isEmpty()))){
+        this.releaseProjectile(p);
         this.projectiles.splice(i,1); continue;
       }
       // check collision based on owner
       if(p.owner === 'player'){
-        // player projectiles hit enemies
-        for(let j=this.enemies.length-1;j>=0;j--){
-          const e = this.enemies[j];
+        // player projectiles hit enemies (check only nearby buckets)
+        const pbx = Math.floor((p.x || 0) / _bucketSize);
+        const pby = Math.floor((p.y || 0) / _bucketSize);
+        const nearbySet = new Set();
+        for(let dx=-1; dx<=1; dx++){
+          for(let dy=-1; dy<=1; dy++){
+            const k = `${pbx+dx},${pby+dy}`;
+            if(enemyBuckets.has(k)) for(const en of enemyBuckets.get(k)) nearbySet.add(en);
+          }
+        }
+        for(const e of nearbySet){
           const d = Math.hypot(p.x - e.x, p.y - e.y);
           if(d < e.radius + p.radius){
             // hit
             e.hp = (e.hp || 1) - 1;
+            this.releaseProjectile(p);
             this.projectiles.splice(i,1);
             if(e.hp <= 0){
               // remove enemy
               const wasMain = e.type === 'main';
-              this.enemies.splice(j,1);
+              const idx = this.enemies.indexOf(e);
+              if(idx >= 0) this.enemies.splice(idx,1);
               this.sound.play('pop');
               this.particles.add(e.x,e.y,20);
               // award score
@@ -283,6 +367,7 @@ export default class Game {
                   this._floatingTexts.push({ text: `+${bonus}`, x: e.x, y: e.y, size: 22, color: '#ffd700', life: 2.0 });
                 }
                 setStatus('Main enemy destroyed! Level Cleared');
+                try{ this.sound.play && this.sound.play('super'); }catch(e){}
                 setBossHP(null);
                 setTimeout(()=>{ this.nextLevel(); }, 700);
                 return; // bail from update because level will reset
@@ -307,6 +392,7 @@ export default class Game {
               this.sound.play('die');
               this.handleDeath();
             }
+            this.releaseProjectile(p);
             this.projectiles.splice(i,1);
             continue;
           }
@@ -339,6 +425,7 @@ export default class Game {
     const powerLabel = this.player.weaponAmmo>0 ? 'weapon' : (this.player.speedTimer>0 ? 'speed' : (this.player.shieldTimer>0 ? 'shield' : ''));
     setPowerup(powerLabel, this.player.weaponAmmo>0 ? null : (this.player.speedTimer>0 ? this.player.speedTimer : (this.player.shieldTimer>0 ? this.player.shieldTimer : null)));
     setAmmo(this.player.weaponAmmo);
+    try{ if(typeof _highlightAmmoIfNeeded === 'function') _highlightAmmoIfNeeded(this.player.weaponAmmo); }catch(e){ /* ignore */ }
   } // update(dt)
 
   handleInput(dt){
@@ -555,6 +642,7 @@ export default class Game {
     if(this.percent >= (typeof LEVEL_COMPLETE_PERCENT !== 'undefined' ? LEVEL_COMPLETE_PERCENT : CAPTURE_PERCENT)){
       console.log('Percent threshold reached; scheduling nextLevel. percent=', this.percent);
       setStatus('Level Cleared!');
+      try{ this.sound.play && this.sound.play('super'); }catch(e){}
       // start next level
       setTimeout(()=>{ this.nextLevel(); }, 200);
     }
@@ -838,6 +926,8 @@ export default class Game {
   gameOver(){
     this.running = false;
     if(this.rafId) cancelAnimationFrame(this.rafId);
+    // stop background music
+    try{ if(this.bgMusic){ this.bgMusic.pause(); this.bgMusic.currentTime = 0; this.bgMusic = null; } }catch(e){}
     setStatus('Game Over');
   } // gameOver()
 
@@ -938,6 +1028,7 @@ export default class Game {
     // add obstacles for this level (mark grid cells with 2)
     this.powerups = [];
     this.projectiles = [];
+    this._projectilePool = [];
     // If JSON defines explicit obstacle rectangles, use those deterministically
     if(Array.isArray(cfg.obstacles) && cfg.obstacles.length){
       for(const obs of cfg.obstacles){
@@ -994,7 +1085,10 @@ export default class Game {
         const pcell = this.cellFor(WIDTH/2, HEIGHT - CELL*1.5);
         if(pcell.r === r && pcell.c === c) blocked = true;
         if(blocked) continue;
-        const w = this.worldForCell(r,c); const t = types[Math.floor(Math.random()*types.length)]; this.powerups.push(new Powerup(w.x,w.y,t)); placed++; }
+        const w = this.worldForCell(r,c); const t = types[Math.floor(Math.random()*types.length)]; this.powerups.push(new Powerup(w.x,w.y,t));
+        // spawn SFX for visible powerups
+        try{ this.sound.play && this.sound.play('powerup_spawn'); }catch(e){}
+        placed++; }
     }
     // Sparx enemies removed — no edge-walking / homing enemy to avoid persistent chase behavior
     // reset player — ensure spawn is on a safe (filled) cell
@@ -1009,6 +1103,7 @@ export default class Game {
     this.trail = [];
     this.updatePercent();
     setStatus(`Level ${this.level}`);
+    try{ this.sound.play && this.sound.play('level_start'); }catch(e){}
     // HUD show level name
     setLevelName(this.currentLevel?.name || '');
     // show boss HP if present
@@ -1020,6 +1115,57 @@ export default class Game {
 
     // set initial sizes for enemies based on area they occupy (using per-cell metadata when possible)
     try{ this.updateEnemySizes(); }catch(e){ /* ignore sizing errors */ }
+
+    // start per-level background music (if defined)
+    try{
+      // stop any existing music
+      if(this.bgMusic){ try{ this.bgMusic.pause(); this.bgMusic.currentTime = 0; }catch(_){ } this.bgMusic = null; }
+      const music = this.currentLevel?.music;
+      if(music){
+        this.bgMusic = new Audio(music);
+        this.bgMusic.loop = true;
+        this.bgMusic.volume = typeof this.musicVolume === 'number' ? this.musicVolume : 0.45;
+        try{ if(typeof this.bgMusic.playbackRate !== 'undefined') this.bgMusic.playbackRate = this.musicBaseRate; }catch(e){}
+        try{ if(this.musicPreservePitch){ if('preservesPitch' in this.bgMusic) this.bgMusic.preservesPitch = true; else if('mozPreservesPitch' in this.bgMusic) this.bgMusic.mozPreservesPitch = true; else if('webkitPreservesPitch' in this.bgMusic) this.bgMusic.webkitPreservesPitch = true; } }catch(e){}
+        this.bgMusic.play().catch(() => {});
+      }
+    }catch(e){ /* best-effort: don't break level load if music fails */ }
+    // update debug HUD sidebar active state (if present)
+    try{ setActiveLevel(this.level); }catch(e){}
   } // nextLevel()
+
+  // Jump straight to a specific level (1-based). Useful for debugging.
+  async gotoLevel(n){
+    try{
+      const max = LEVELS.count || 1;
+      let target = Number(n) || 1;
+      if(target < 1) target = 1;
+      if(target > max) target = ((target - 1) % max) + 1;
+      // Set level so nextLevel will load the requested index
+      this.level = target - 1;
+      await this.nextLevel();
+    }catch(e){ console.warn('gotoLevel failed', e); }
+  }
+
+  // Spawn a projectile using pool when possible
+  spawnProjectile(x,y,dx,dy,speed=300, owner='player', radius=3, life=3){
+    let p = null;
+    if(this._projectilePool && this._projectilePool.length){
+      p = this._projectilePool.pop();
+      try{ p.reset(x,y,dx,dy,speed,owner,radius,life); }catch(e){ /* fallback to new if reset fails */ p = null; }
+    }
+    if(!p){ p = new Projectile(x,y,dx,dy,speed, owner, radius, life); }
+    this.projectiles.push(p);
+    return p;
+  }
+
+  // Release a projectile back into pool (soft limit)
+  releaseProjectile(p){
+    if(!p) return;
+    // defensively reset some fields
+    p.life = 0; p.vx = 0; p.vy = 0; p.x = -9999; p.y = -9999;
+    if(!this._projectilePool) this._projectilePool = [];
+    if(this._projectilePool.length < 512) this._projectilePool.push(p);
+  }
 } // class Game
 

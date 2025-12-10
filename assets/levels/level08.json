@@ -5,6 +5,7 @@
   "fill": "#f0e68c",
   "bgUncaptured": "assets/backgrounds/level08/level08 background.jpg",
   "bgCaptured": "assets/backgrounds/level08/captured.jpg",
+  "music": "assets/Music/level08.mp3",
   "enemyImages": { "main": "assets/sprites/enemies/main/level08-main.png", "minion": "assets/sprites/enemies/minion/level08-minion.png", "projectile": "assets/sprites/projectiles/level08-proj.png", "powerup": "assets/sprites/powerups/level08-powerup.png" },
   "obstacleImage": "assets/sprites/obstacles/level08-obstacle.png",
   "main": { "hp": 10, "color": "#ff3333", "x": 420, "y": 200, "pattern": "patrol", "aggression": 1.6, "temperament": "aggressive", "weapon": "radial", "fireRate": 1.0 },
@@ -25,7 +26,9 @@
   "powerups": 3
   ,
   "enemyConfig": {
-    "main": { "minSpeed": 70, "maxSpeed": 120, "acceleration": 10, "minSize": 10, "maxSize": 18 },
-    "minion": { "minSpeed": 80, "maxSpeed": 170, "acceleration": 13, "minSize": 5, "maxSize": 9 }
-  }
+    "projectile": { "size": 5, "speed": 160, "life": 3, "burstCount": 5, "burstSpread": 1.09955742876, "radialCount": 8, "axesCount": 4 },
+    "main": { "minSpeed": 70, "maxSpeed": 120, "acceleration": 10, "minSize": 10, "maxSize": 18, "baseSize": 14, "segments": 7, "segmentSpeed": 190, "segmentDistance": 38 },
+    "minion": { "minSpeed": 80, "maxSpeed": 170, "acceleration": 13, "minSize": 5, "maxSize": 9, "baseSize": 6, "segments": 4, "segmentSpeed": 140, "segmentDistance": 14 }
+  },
+  "obstacleConfig": { "baseW": 4, "baseH": 4 }
 }

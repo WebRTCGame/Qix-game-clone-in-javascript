@@ -5,6 +5,7 @@
   "fill": "#e07bff",
   "bgUncaptured": "assets/backgrounds/level11/level11 background.jpg",
   "bgCaptured": "assets/backgrounds/level11/captured.jpg",
+  "music": "assets/Music/level11.mp3",
   "enemyImages": { "main": "assets/sprites/enemies/main/level11-main.png", "minion": "assets/sprites/enemies/minion/level11-minion.png", "projectile": "assets/sprites/projectiles/level11-proj.png", "powerup": "assets/sprites/powerups/level11-powerup.png" },
   "obstacleImage": "assets/sprites/obstacles/level11-obstacle.png",
   "main": { "hp": 13, "color": "#ff8800", "x": 420, "y": 200, "pattern": "aggro", "aggression": 1.9, "temperament": "erratic", "weapon": "radial", "fireRate": 1.2 },
@@ -22,8 +23,10 @@
   ],
   "powerups": 2,
   "enemyConfig": {
-    "main": { "minSpeed": 65, "maxSpeed": 115, "acceleration": 9, "minSize": 9, "maxSize": 16, "hp": 9, "color": "#ff8800" },
-    "minion": { "minSpeed": 70, "maxSpeed": 150, "acceleration": 12, "minSize": 4, "maxSize": 8 }
+    "projectile": { "size": 6, "speed": 180, "life": 3, "burstCount": 6, "burstSpread": 1.2, "radialCount": 8, "axesCount": 4 },
+    "main": { "minSpeed": 90, "maxSpeed": 160, "acceleration": 12, "minSize": 13, "maxSize": 24, "baseSize": 18, "segments": 8, "segmentSpeed": 210, "segmentDistance": 44 },
+    "minion": { "minSpeed": 95, "maxSpeed": 220, "acceleration": 18, "minSize": 6, "maxSize": 12, "baseSize": 9, "segments": 6, "segmentSpeed": 160, "segmentDistance": 18 }
   },
+  "obstacleConfig": { "baseW": 4, "baseH": 4 },
   "completionBonus": { "type": "special_explosion", "value": 8000, "note": "bonus for destroying main before completing capture" }
 }
